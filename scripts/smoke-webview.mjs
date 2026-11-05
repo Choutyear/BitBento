@@ -66,6 +66,7 @@ let preview = null;
 let compatiblePreview = null;
 let ui020 = null;
 let ui021 = null;
+let mixedOutputs = null;
 if (process.env.BITBENTO_TEST_PREVIEW === '1') {
   await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(mediaPath)}] })`);
   await new Promise(resolve => setTimeout(resolve, 1800));
@@ -112,6 +113,13 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
     await new Promise(resolve=>setTimeout(resolve,250));
     const resolution=document.getElementById('resolution');
     const portraitOptions=[...resolution.options].map(option=>({preset:option.dataset.preset,value:option.value,text:option.textContent}));
+    const bitrate=document.getElementById('bitrateSlider'),quality=document.getElementById('qualityText');
+    resolution.value='2160x3840';resolution.dispatchEvent(new Event('input',{bubbles:true}));bitrate.value='1';bitrate.dispatchEvent(new Event('input',{bubbles:true}));
+    await new Promise(resolve=>setTimeout(resolve,350));
+    const lowQuality={text:quality.textContent,className:quality.className,color:getComputedStyle(quality).color};
+    resolution.value='720x1280';resolution.dispatchEvent(new Event('input',{bubbles:true}));bitrate.value='4';bitrate.dispatchEvent(new Event('input',{bubbles:true}));
+    await new Promise(resolve=>setTimeout(resolve,350));
+    const excellentQuality={text:quality.textContent,className:quality.className,color:getComputedStyle(quality).color};
     resolution.value='1080x1920';resolution.dispatchEvent(new Event('input',{bubbles:true}));
     document.getElementById('saveAll').click();
     await new Promise(resolve=>setTimeout(resolve,1200));
@@ -122,6 +130,12 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
     await new Promise(resolve=>setTimeout(resolve,600));
     const landscapeEstimate=document.getElementById('cmpResNew').textContent;
     const landscapeOptions=[...resolution.options].map(option=>({preset:option.dataset.preset,value:option.value,text:option.textContent}));
+    const portraitFile=[...document.querySelectorAll('.file[data-id]')].find(file=>file.textContent.includes('portrait-360x640.mp4'));
+    portraitFile.click();
+    await new Promise(resolve=>setTimeout(resolve,400));
+    resolution.value='720x1280';resolution.dispatchEvent(new Event('input',{bubbles:true}));bitrate.value='0.7';bitrate.dispatchEvent(new Event('input',{bubbles:true}));
+    document.getElementById('saveAll').click();
+    await new Promise(resolve=>setTimeout(resolve,1000));
     const about=document.getElementById('aboutModal');
     document.getElementById('aboutButton').click();
     const aboutState={
@@ -141,18 +155,50 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
     return {
       video:portraitVideo,
       stage:{width:stageRect.width,height:stageRect.height,innerHeight:stage.clientHeight},
-      portraitOptions,landscapeOptions,portraitEstimate,landscapeEstimate,configured,
+      portraitOptions,landscapeOptions,portraitEstimate,landscapeEstimate,configured,lowQuality,excellentQuality,
       aboutState,licenseOpen,thirdPartyOpen,
       guideHasRemovedSentence:document.getElementById('guideModal').textContent.includes('批量输出设置可随时调整，不会清除已保存状态。')
     };
   })()`);
   const portraitValues=ui021.portraitOptions.map(option=>option.value).join(',');
   const landscapeValues=ui021.landscapeOptions.map(option=>option.value).join(',');
-  if(ui021.video.width!==360||ui021.video.height!==640||ui021.video.objectFit!=='contain'||ui021.video.readyState<1||!ui021.video.portraitClass||Math.abs(ui021.video.renderedHeight-ui021.stage.innerHeight)>1||ui021.video.renderedWidth>=ui021.stage.width||ui021.stage.width<=ui021.stage.height||portraitValues!=='same,2160x3840,1440x2560,1080x1920,720x1280'||landscapeValues!=='same,3840x2160,2560x1440,1920x1080,1280x720'||ui021.portraitEstimate!=='1080×1920'||ui021.landscapeEstimate!=='1920×1080'||ui021.configured!=='2'||!ui021.aboutState.open||ui021.aboutState.version!=='Version 0.2.1'||!ui021.aboutState.developer?.includes('Steve Chou')||!ui021.aboutState.homepage?.includes('GitHub')||!ui021.aboutState.githubLogo||!ui021.aboutState.freeNotice?.includes('无需购买、订阅或支付任何费用')||!ui021.licenseOpen||!ui021.thirdPartyOpen||ui021.guideHasRemovedSentence)throw new Error(`0.2.1 UI regression: ${JSON.stringify(ui021)}`);
+  if(ui021.video.width!==360||ui021.video.height!==640||ui021.video.objectFit!=='contain'||ui021.video.readyState<1||!ui021.video.portraitClass||Math.abs(ui021.video.renderedHeight-ui021.stage.innerHeight)>1||ui021.video.renderedWidth>=ui021.stage.width||ui021.stage.width<=ui021.stage.height||portraitValues!=='same,2160x3840,1440x2560,1080x1920,720x1280'||landscapeValues!=='same,3840x2160,2560x1440,1920x1080,1280x720'||ui021.portraitEstimate!=='1080×1920'||ui021.landscapeEstimate!=='1920×1080'||ui021.configured!=='2'||ui021.lowQuality.className!=='quality-low'||ui021.excellentQuality.className!=='quality-excellent'||ui021.lowQuality.color===ui021.excellentQuality.color||!ui021.aboutState.open||ui021.aboutState.version!=='Version 0.2.1'||!ui021.aboutState.developer?.includes('Steve Chou')||!ui021.aboutState.homepage?.includes('GitHub')||!ui021.aboutState.githubLogo||!ui021.aboutState.freeNotice?.includes('无需购买、订阅或支付任何费用')||!ui021.licenseOpen||!ui021.thirdPartyOpen||ui021.guideHasRemovedSentence)throw new Error(`0.2.1 UI regression: ${JSON.stringify(ui021)}`);
   if(process.env.BITBENTO_CAPTURE_UI==='1'){
     const capture=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
     await fs.writeFile(path.join(process.cwd(),'test-media','about-0.2.1.png'),Buffer.from(capture.data,'base64'));
   }
+}
+if (process.env.BITBENTO_TEST_MIXED_OUTPUT === '1') {
+  mixedOutputs = await evaluate(`(async()=>{
+    document.getElementById('aboutModal').classList.remove('open');
+    const invoke=window.__TAURI__.core.invoke,listen=window.__TAURI__.event.listen;
+    const runRound=async()=>{
+      document.getElementById('addQueue').click();
+      await new Promise(resolve=>setTimeout(resolve,400));
+      const outputs=[];
+      const completed=new Promise(async(resolve,reject)=>{
+        const timeout=setTimeout(()=>reject(new Error('mixed queue timed out')),90000);
+        const unlisten=await listen('job-progress',event=>{if(event.payload.state==='completed'&&event.payload.outputPath){outputs.push(event.payload.outputPath);if(outputs.length===2){clearTimeout(timeout);unlisten();resolve();}}if(event.payload.state==='failed'){clearTimeout(timeout);unlisten();reject(new Error(event.payload.technicalDetail||'mixed encode failed'));}});
+      });
+      document.getElementById('renderAll').click();
+      await completed;
+      const media=await Promise.all(outputs.map(path=>invoke('probe_media',{path})));
+      document.getElementById('clearQueue').click();
+      await new Promise(resolve=>setTimeout(resolve,300));
+      return media.map(item=>({filename:item.filename,width:item.width,height:item.height})).sort((a,b)=>a.width-b.width);
+    };
+    const fromPortrait=await runRound();
+    const landscapeFile=[...document.querySelectorAll('.file[data-id]')].find(file=>file.textContent.includes("测试 视频 O'Brien.mp4"));
+    landscapeFile.click();
+    await new Promise(resolve=>setTimeout(resolve,400));
+    const resolution=document.getElementById('resolution'),bitrate=document.getElementById('bitrateSlider');
+    resolution.value='1280x720';resolution.dispatchEvent(new Event('input',{bubbles:true}));bitrate.value='0.7';bitrate.dispatchEvent(new Event('input',{bubbles:true}));
+    document.getElementById('saveAll').click();
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    const fromLandscape=await runRound();
+    return {fromPortrait,fromLandscape};
+  })()`);
+  for(const round of [mixedOutputs.fromPortrait,mixedOutputs.fromLandscape])if(round.length!==2||round[0].width!==720||round[0].height!==1280||round[1].width!==1280||round[1].height!==720)throw new Error(`mixed orientation outputs failed: ${JSON.stringify(mixedOutputs)}`);
 }
 if (process.env.BITBENTO_TEST_COMPAT === '1') {
   const mkvPath = path.join(process.cwd(), 'test-media', '长路径测试_abcdefghijklmnopqrstuvwxyz_0123456789', '第二层_日本語とスペース_abcdefghijklmnopqrstuvwxyz', '长路径 样本.mkv');
@@ -211,5 +257,5 @@ if (strictNvenc && (completed.encoderInfo?.encoder !== 'hevc_nvenc' || !complete
   throw new Error(`Strict target did not use NVENC: ${JSON.stringify(completed.encoderInfo)}`);
 }
 
-console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, ui020, ui021, completed }, null, 2));
+console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, ui020, ui021, mixedOutputs, completed }, null, 2));
 socket.close();

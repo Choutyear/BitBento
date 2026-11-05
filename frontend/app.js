@@ -88,6 +88,14 @@
     }
   }
 
+  function estimatedQuality(estimate, media) {
+    const pixels=Math.max(1,estimate.resolvedWidth*estimate.resolvedHeight);
+    const fps=Math.max(1,estimate.resolvedFrameRate||media.frameRate||30);
+    const codecEfficiency=estimate.resolvedVideoCodec==='AV1'?1.7:estimate.resolvedVideoCodec==='H.265'?1.5:estimate.resolvedVideoCodec==='VP9'?1.35:1;
+    const effectiveBitsPerPixel=(estimate.videoBitrateKbps*1000/pixels/fps)*codecEfficiency;
+    return effectiveBitsPerPixel>=0.07?'excellent':effectiveBitsPerPixel>=0.03?'good':'low';
+  }
+
   function updatePreview(item) {
     const video = $('videoPreview'), empty = $('previewEmpty');
     if (!item) {
@@ -247,7 +255,7 @@
       $('sizeOriginal').textContent=fmtBytes(m.sizeBytes); $('sizeOutput').textContent=fmtBytes(est.estimatedBytes); $('sizeFill').style.width=`${ratio}%`; $('sizeSaving').textContent=percent>=0?tr(`预计节省 ${percent}%`,`About ${percent}% smaller`):tr(`预计增加 ${-percent}%`,`About ${-percent}% larger`);
       $('cmpFormatNew').textContent=est.resolvedContainer; $('cmpCodecNew').textContent=est.resolvedVideoCodec; $('cmpResNew').textContent=state.mode==='targetSize'?v.res.replaceAll(' ',''):`${est.resolvedWidth}×${est.resolvedHeight}`; $('cmpFpsNew').textContent=state.mode==='targetSize'?v.fps:est.resolvedFrameRate?`${est.resolvedFrameRate.toFixed(3).replace(/0+$/,'').replace(/\.$/,'')} FPS`:tr('保持可变帧率','Preserve variable frame rate'); $('cmpAudioNew').textContent=est.resolvedAudio;
       $('autoCodec').textContent=`${est.resolvedVideoCodec}${tr('（自动）',' (automatic)')}`; $('proSummaryLine1').textContent=`${est.resolvedContainer} · ${est.resolvedVideoCodec} · ${est.resolvedWidth}×${est.resolvedHeight} · ${est.resolvedFrameRate?`${est.resolvedFrameRate.toFixed(2).replace(/\.00$/,'')} FPS`:tr('保持原帧率','Preserve source rate')}`; $('proSummaryLine2').textContent=`${(est.videoBitrateKbps/1000).toFixed(1)} Mbps · ${est.resolvedAudio}`; $('proEstimate').textContent=`${tr('约','About')} ${fmtBytes(est.estimatedBytes)}`;
-      const quality=est.videoBitrateKbps<500?'low':est.videoBitrateKbps<1800?'good':'excellent'; $('qualityWarning').classList.toggle('show', quality==='low'); $('qualityText').className=`quality-${quality}`; $('qualityText').textContent=quality==='low'?tr('较低','Low'):quality==='good'?tr('良好','Good'):tr('优秀','Excellent');
+      const quality=estimatedQuality(est,m); $('qualityWarning').classList.toggle('show', quality==='low'); $('qualityText').className=`quality-${quality}`; $('qualityText').textContent=quality==='low'?tr('较低','Low'):quality==='good'?tr('良好','Good'):tr('优秀','Excellent');
     } catch (error) { $('sizeOutput').textContent='无法估算'; $('sizeSaving').textContent=errorText(error); }
   }
 
@@ -267,8 +275,19 @@
 
   function renderAll(){ renderFiles(); renderQueue(); updateDetail(); }
 
+  async function prepareSavedItem(item, settings) {
+    const oriented=orientSettingsForMedia(settings,item.media);
+    return {item,settings:oriented,estimate:await calculate(item,oriented)};
+  }
+
+  function commitSavedItem(prepared) {
+    const {item,settings,estimate}=prepared;
+    item.settings=structuredClone(settings); item.estimate=estimate; item.configured=true; item.selected=true; item.dirty=false;
+    return estimate;
+  }
+
   async function saveItem(item, settings) {
-    const oriented=orientSettingsForMedia(settings,item.media); const estimate = await calculate(item, oriented); item.settings=structuredClone(oriented); item.estimate=estimate; item.configured=true; item.selected=true; item.dirty=false; return estimate;
+    return commitSavedItem(await prepareSavedItem(item,settings));
   }
 
   async function applyBatchSettings() {
@@ -303,7 +322,7 @@
   $('chooseBatchFolder').style.display='none'; $('chooseBatchFolder').onclick=async()=>{try{const path=await invoke('select_output_directory');if(path){state.customDirectory=path;$('pathPreview').textContent=path;$('chooseBatchFolder').style.display='block';await applyBatchSettings();}else if(!state.customDirectory){$('saveLocation').value='source';}}catch(e){toast(errorText(e),true);}};
   $('hardwareAccel').onchange=async()=>{const result=state.hardware.find(h=>h.mode===$('hardwareAccel').value);$('accelHint').textContent=result?.detail||tr('自动选择已通过初始化测试的最快编码器','Auto uses the fastest encoder that passed initialization.');await applyBatchSettings();};
   $('saveCurrent').onclick=async()=>{const item=active();if(!item)return toast('请先添加视频');try{await saveItem(item,currentSettings(item));renderAll();toast(`已保存 ${item.media.filename} 的参数`);}catch(e){toast(errorText(e),true);}};
-  $('saveAll').onclick=async()=>{const source=active();if(!source)return toast('请先添加视频');const template=currentSettings(source);let saved=0;for(const item of state.files){try{await saveItem(item,{...template});saved++;}catch(e){item.configured=false;item.selected=false;}}renderAll();toast(`已为 ${saved} 个文件独立计算并保存参数`,saved===0);};
+  $('saveAll').onclick=async()=>{const source=active();if(!source)return toast('请先添加视频');const template=currentSettings(source);try{const prepared=await Promise.all(state.files.map(item=>prepareSavedItem(item,{...template})));prepared.forEach(commitSavedItem);renderAll();toast(`已为 ${prepared.length} 个文件独立换向、计算并保存参数`);}catch(e){toast(`应用到全部失败，未修改任何文件：${errorText(e)}`,true);}};
   $('addQueue').onclick=async()=>{const selected=state.files.filter(f=>f.selected&&f.configured);if(!selected.length)return toast('请先勾选已保存参数的文件');try{const requests=selected.map(item=>({id:uuid(),media:item.media,settings:item.settings}));const jobs=await invoke('enqueue_jobs',{requests});state.queue.push(...jobs);renderQueue();toast(`已加入 ${jobs.length} 个真实任务`);}catch(e){toast(errorText(e),true);}};
   $('toggleQueue').onclick=()=>$('queueDrawer').classList.toggle('open');
   $('clearQueue').onclick=async()=>{try{await invoke('clear_queue');state.queue=[];renderQueue();}catch(e){toast(errorText(e),true);}};

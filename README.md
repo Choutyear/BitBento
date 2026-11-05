@@ -2,18 +2,22 @@
 
 Neatly packed, locally processed.
 
-This is the approved UI and engineering handoff package for building BitBento as a Windows 11 `.exe` application with Tauri 2 and FFmpeg.
+BitBento is a free, open-source, fully offline video compressor for Windows 11 x64, built with Tauri 2, Rust, FFmpeg, and ffprobe.
+
+Project homepage: https://github.com/Choutyear/BitBento
+
+BitBento-owned source code is released under the [MIT License](LICENSE). Bundled third-party components retain their respective licenses; see [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
 
 ## What is included
 
 - Approved single-page interface: `frontend/index.html`
-- Tauri 2 project skeleton: `src-tauri/`
+- Tauri 2 + Rust desktop application: `src-tauri/`
 - Product and encoding requirements: `docs/`
 - Codex execution contract: `AGENTS.md`
-- FFmpeg sidecar preparation template: `scripts/prepare-ffmpeg.ps1`
+- Verified FFmpeg sidecar preparation and provenance script: `scripts/prepare-ffmpeg.ps1`
 - Release collection script: `scripts/collect-release.ps1`
 
-FFmpeg binaries are intentionally not included. They must be downloaded from a trusted current Windows build, hash-verified, and placed using the preparation script. This avoids shipping an unverified or stale executable.
+Release builds bundle hash-verified local FFmpeg and ffprobe sidecars. Video files never leave the computer, and BitBento contains no telemetry, account, advertising, or cloud-upload SDK.
 
 ## Recommended build environment
 

@@ -47,6 +47,7 @@ fn main() {
             commands::cancel_job,
             commands::remove_job,
             commands::clear_queue,
+            commands::open_project_homepage,
             commands::open_output_file,
             commands::open_output_folder,
         ])

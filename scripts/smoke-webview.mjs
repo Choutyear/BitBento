@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs/promises';
 
 const debugPort = process.env.BITBENTO_CDP_PORT || '9222';
 const targets = await fetch(`http://127.0.0.1:${debugPort}/json`).then(response => response.json());
@@ -64,6 +65,7 @@ const mediaPath = path.join(process.cwd(), 'test-media', "测试 视频 O'Brien.
 let preview = null;
 let compatiblePreview = null;
 let ui020 = null;
+let ui021 = null;
 if (process.env.BITBENTO_TEST_PREVIEW === '1') {
   await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(mediaPath)}] })`);
   await new Promise(resolve => setTimeout(resolve, 1800));
@@ -96,6 +98,41 @@ if (process.env.BITBENTO_TEST_UI_020 === '1') {
     return {before,after,english,hardwareDefault:hardware.value};
   })()`);
   if(ui020.before.configured!=='1'||ui020.before.checked!=='✓'||ui020.after.configured!=='1'||ui020.after.checked!=='✓'||ui020.before.resOld.replaceAll(' ','')!==ui020.before.resNew.replaceAll(' ','')||ui020.before.fpsOld!==ui020.before.fpsNew||ui020.english.guide!=='Guide'||ui020.english.about!=='About'||ui020.english.mediaHeading!=='Media Library')throw new Error(`0.2 UI regression: ${JSON.stringify(ui020)}`);
+}
+if (process.env.BITBENTO_TEST_UI_021 === '1') {
+  const portraitPath = path.join(process.cwd(), 'test-media', 'portrait-360x640.mp4');
+  await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(portraitPath)}] })`);
+  await new Promise(resolve => setTimeout(resolve, 1800));
+  ui021 = await evaluate(`(async()=>{
+    const video=document.getElementById('videoPreview');
+    const stage=document.querySelector('.preview-stage');
+    const about=document.getElementById('aboutModal');
+    document.getElementById('aboutButton').click();
+    const aboutState={
+      open:about.classList.contains('open'),
+      version:about.querySelector('.about-version')?.textContent,
+      developer:[...about.querySelectorAll('.about-fact')].find(row=>row.textContent.includes('开发者'))?.textContent,
+      homepage:document.getElementById('projectHomepage')?.textContent,
+      freeNotice:about.querySelector('.free-notice')?.textContent
+    };
+    document.getElementById('licenseButton').click();
+    const licenseOpen=document.getElementById('licenseModal').classList.contains('open');
+    document.getElementById('thirdPartyButton').click();
+    const thirdPartyOpen=document.getElementById('thirdPartyModal').classList.contains('open');
+    document.getElementById('licenseModal').classList.remove('open');
+    document.getElementById('thirdPartyModal').classList.remove('open');
+    return {
+      video:{width:video.videoWidth,height:video.videoHeight,readyState:video.readyState,objectFit:getComputedStyle(video).objectFit,objectPosition:getComputedStyle(video).objectPosition},
+      stage:{width:stage.getBoundingClientRect().width,height:stage.getBoundingClientRect().height},
+      aboutState,licenseOpen,thirdPartyOpen,
+      guideHasRemovedSentence:document.getElementById('guideModal').textContent.includes('批量输出设置可随时调整，不会清除已保存状态。')
+    };
+  })()`);
+  if(ui021.video.width!==360||ui021.video.height!==640||ui021.video.objectFit!=='contain'||ui021.video.readyState<1||ui021.stage.width<=ui021.stage.height||!ui021.aboutState.open||ui021.aboutState.version!=='Version 0.2.1'||!ui021.aboutState.developer?.includes('Steve Chou')||!ui021.aboutState.homepage?.includes('GitHub')||!ui021.aboutState.freeNotice?.includes('无需购买、订阅或支付任何费用')||!ui021.licenseOpen||!ui021.thirdPartyOpen||ui021.guideHasRemovedSentence)throw new Error(`0.2.1 UI regression: ${JSON.stringify(ui021)}`);
+  if(process.env.BITBENTO_CAPTURE_UI==='1'){
+    const capture=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
+    await fs.writeFile(path.join(process.cwd(),'test-media','about-0.2.1.png'),Buffer.from(capture.data,'base64'));
+  }
 }
 if (process.env.BITBENTO_TEST_COMPAT === '1') {
   const mkvPath = path.join(process.cwd(), 'test-media', '长路径测试_abcdefghijklmnopqrstuvwxyz_0123456789', '第二层_日本語とスペース_abcdefghijklmnopqrstuvwxyz', '长路径 样本.mkv');
@@ -154,5 +191,5 @@ if (strictNvenc && (completed.encoderInfo?.encoder !== 'hevc_nvenc' || !complete
   throw new Error(`Strict target did not use NVENC: ${JSON.stringify(completed.encoderInfo)}`);
 }
 
-console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, ui020, completed }, null, 2));
+console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, ui020, ui021, completed }, null, 2));
 socket.close();

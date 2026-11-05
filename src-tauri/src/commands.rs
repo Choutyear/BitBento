@@ -360,6 +360,14 @@ pub fn clear_queue(state: State<'_, AppState>) -> Result<(), AppError> {
 }
 
 #[tauri::command]
+pub fn open_project_homepage() -> Result<(), AppError> {
+    // Keep this URL in trusted backend code. The frontend cannot pass arbitrary
+    // URLs to the operating system.
+    open::that_detached("https://github.com/Choutyear/BitBento")
+        .map_err(|e| AppError::Output(e.to_string()))
+}
+
+#[tauri::command]
 pub fn open_output_file(path: String) -> Result<(), AppError> {
     let path = PathBuf::from(path);
     if !path.is_file() {

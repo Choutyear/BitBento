@@ -168,9 +168,21 @@ pub fn estimate(media: &MediaInfo, settings: &OutputSettings) -> Result<Estimate
         output_path: final_path.to_string_lossy().to_string(),
         resolved_container: container,
         resolved_video_codec: codec,
-        resolved_width: settings.width.unwrap_or(media.width),
-        resolved_height: settings.height.unwrap_or(media.height),
-        resolved_frame_rate: settings.frame_rate.or(media.frame_rate),
+        resolved_width: if settings.mode == EncodeMode::TargetSize {
+            media.width
+        } else {
+            settings.width.unwrap_or(media.width)
+        },
+        resolved_height: if settings.mode == EncodeMode::TargetSize {
+            media.height
+        } else {
+            settings.height.unwrap_or(media.height)
+        },
+        resolved_frame_rate: if settings.mode == EncodeMode::TargetSize {
+            media.frame_rate
+        } else {
+            settings.frame_rate.or(media.frame_rate)
+        },
         resolved_audio,
         hardware_notice: None,
     })
@@ -473,6 +485,9 @@ fn is_hardware_encoder(encoder: &str) -> bool {
 }
 
 fn append_video_filters(args: &mut Vec<String>, settings: &OutputSettings) {
+    if settings.mode == EncodeMode::TargetSize {
+        return;
+    }
     if let (Some(width), Some(height)) = (settings.width, settings.height) {
         args.extend(["-vf".into(), format!("scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2")]);
     }
@@ -725,10 +740,19 @@ mod tests {
     #[test]
     fn strict_target_reserves_margin_and_audio() {
         let (media, path) = fixture();
-        let result = estimate(&media, &target_settings(10_000_000)).unwrap();
+        let mut settings = target_settings(10_000_000);
+        settings.width = Some(3840);
+        settings.height = Some(2160);
+        settings.frame_rate = Some(60.0);
+        let result = estimate(&media, &settings).unwrap();
         assert_eq!(result.estimated_bytes, 10_000_000);
         assert!(result.video_bitrate_kbps < 1_100);
         assert_eq!(result.resolved_video_codec, "H.265");
+        assert_eq!(
+            (result.resolved_width, result.resolved_height),
+            (1920, 1080)
+        );
+        assert_eq!(result.resolved_frame_rate, Some(30.0));
         let _ = std::fs::remove_file(path);
     }
 

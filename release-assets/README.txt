@@ -1,6 +1,10 @@
 BitBento for Windows 11 x64
 ============================
 
+Developed and maintained by Steve Chou. BitBento is free software: no purchase,
+subscription, or license payment is required. Prefer official GitHub releases
+if a third-party distributor asks for a software license fee.
+
 BitBento performs all video inspection and compression locally. It contains no
 account system, telemetry, advertising, upload, or network feature.
 

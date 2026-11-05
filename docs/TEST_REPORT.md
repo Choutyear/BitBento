@@ -2,7 +2,7 @@
 
 测试日期：2026-11-05  
 测试平台：Windows 11 x64  
-版本：0.1.1
+版本：0.2.0
 
 ## 构建与发布
 
@@ -11,7 +11,7 @@
 - `cargo clippy --all-targets -- -D warnings`：通过。
 - `cargo test`：2/2 单元测试通过。
 - `cargo test -- --ignored`：2/2 真实媒体集成测试通过。
-- Tauri release/NSIS：通过，生成 `release/BitBento-Setup.exe`（47,661,295 bytes，SHA-256 `57af4850096234b4c55721ac777c8c0fbea07434ca7cf059fba454be1021c387`）。
+- Tauri release/NSIS：通过，生成双语 `release/BitBento-Setup.exe`（47,939,977 bytes，SHA-256 `d6b1b1d82f16bd7f4fa1bd96f3305aded1d8d1959b40589fb6f38b0f7351d218`）。安装器包含 English / 简体中文并按 Windows 当前语言预选。
 - 便携版：在 PATH 仅含 `C:\Windows\System32;C:\Windows` 的环境中启动并完成真实编码，未依赖全局 Node.js、Rust 或 FFmpeg。
 - 安装版：静默安装、安装后启动、真实编码及静默卸载均通过；卸载移除了程序和 sidecar，保留用户输出及本地日志。
 - Windows 子进程：FFmpeg、ffprobe 与 taskkill 全部经过统一 `CREATE_NO_WINDOW` 启动器；启动、探测、预览、编码、校验和取消不再创建控制台窗口。
@@ -34,6 +34,12 @@
 ## 设置、队列与编码
 
 - 目标 MB/滑块双向同步、保存后改动标脏、应用全部逐文件重新估算、专业摘要固定两行：通过代码路径和 WebView DOM 验证。
+- 指定大小模式强制保持源分辨率和源帧率；即使请求中残留专业模式的 4K/60 FPS 参数，后端也会忽略。640×360/30 FPS 实测对比栏完全一致。
+- 修改批量文件名后缀、输出目录或硬件选项后，已保存文件仍保持绿色勾和选中状态，并重新计算输出路径。
+- 默认硬件为 NVIDIA NVENC；本机不可用时才回退到自动选择。
+- 队列已移除“独立 MP4 文件”等冗余描述，并显示实际编码器。
+- “良好”和“优秀”使用不同绿色；批量后缀区域不再额外显示 `.mp4`。
+- 应用内简体中文/English 可即时切换并记忆选择；英文文案采用独立撰写。关于页包含 Steve Chou、开源说明和免费软件声明，使用说明覆盖完整基本流程。
 - 封装/编码兼容矩阵：通过。
 - 不可能目标：编码前拒绝，单元测试通过。
 - 严格目标：请求 600,000 bytes，自动模式实际选择 `hevc_nvenc`，最终发布版输出 590,739 bytes；输出校验通过且 H.265/AAC 音视频流完整。

@@ -63,6 +63,7 @@ if (!hardware.some(item => item.mode === 'cpu' && item.available)) throw new Err
 const mediaPath = path.join(process.cwd(), 'test-media', "测试 视频 O'Brien.mp4");
 let preview = null;
 let compatiblePreview = null;
+let ui020 = null;
 if (process.env.BITBENTO_TEST_PREVIEW === '1') {
   await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(mediaPath)}] })`);
   await new Promise(resolve => setTimeout(resolve, 1800));
@@ -77,6 +78,24 @@ if (process.env.BITBENTO_TEST_PREVIEW === '1') {
   if (preview.fileCount !== '1 个文件' || preview.readyState < 1 || !preview.visible || preview.error) {
     throw new Error(`Local preview failed: ${JSON.stringify(preview)}`);
   }
+}
+if (process.env.BITBENTO_TEST_UI_020 === '1') {
+  ui020 = await evaluate(`(async()=>{
+    document.querySelector('[data-mode="target"]').click();
+    document.getElementById('saveCurrent').click();
+    await new Promise(resolve=>setTimeout(resolve,350));
+    const before={configured:document.getElementById('configuredCount').textContent,checked:document.querySelector('.config-check.done')?.textContent,resOld:document.getElementById('cmpResOld').textContent,resNew:document.getElementById('cmpResNew').textContent,fpsOld:document.getElementById('cmpFpsOld').textContent,fpsNew:document.getElementById('cmpFpsNew').textContent};
+    const suffix=document.getElementById('fileSuffix');suffix.value='_batch_changed';suffix.dispatchEvent(new Event('input',{bubbles:true}));
+    const hardware=document.getElementById('hardwareAccel');hardware.value='nvenc';hardware.dispatchEvent(new Event('change',{bubbles:true}));
+    await new Promise(resolve=>setTimeout(resolve,350));
+    const after={configured:document.getElementById('configuredCount').textContent,checked:document.querySelector('.config-check.done')?.textContent};
+    const language=document.getElementById('languageSelect');language.value='en';language.dispatchEvent(new Event('change',{bubbles:true}));
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const english={guide:document.getElementById('guideButton').textContent,about:document.getElementById('aboutButton').textContent,mediaHeading:document.querySelector('.source-panel .panel-head h2').textContent};
+    language.value='zh-CN';language.dispatchEvent(new Event('change',{bubbles:true}));
+    return {before,after,english,hardwareDefault:hardware.value};
+  })()`);
+  if(ui020.before.configured!=='1'||ui020.before.checked!=='✓'||ui020.after.configured!=='1'||ui020.after.checked!=='✓'||ui020.before.resOld.replaceAll(' ','')!==ui020.before.resNew.replaceAll(' ','')||ui020.before.fpsOld!==ui020.before.fpsNew||ui020.english.guide!=='Guide'||ui020.english.about!=='About'||ui020.english.mediaHeading!=='Media Library')throw new Error(`0.2 UI regression: ${JSON.stringify(ui020)}`);
 }
 if (process.env.BITBENTO_TEST_COMPAT === '1') {
   const mkvPath = path.join(process.cwd(), 'test-media', '长路径测试_abcdefghijklmnopqrstuvwxyz_0123456789', '第二层_日本語とスペース_abcdefghijklmnopqrstuvwxyz', '长路径 样本.mkv');
@@ -135,5 +154,5 @@ if (strictNvenc && (completed.encoderInfo?.encoder !== 'hevc_nvenc' || !complete
   throw new Error(`Strict target did not use NVENC: ${JSON.stringify(completed.encoderInfo)}`);
 }
 
-console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, completed }, null, 2));
+console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, ui020, completed }, null, 2));
 socket.close();

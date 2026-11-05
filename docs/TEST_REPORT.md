@@ -9,10 +9,10 @@
 - `npm ci`：通过，3 个包，0 个漏洞。
 - `npm run tauri dev`：通过，WebView 加载完成且控制台无错误。
 - `cargo clippy --all-targets -- -D warnings`：通过。
-- `cargo test`：2/2 单元测试通过。
+- `cargo test`：4/4 常规单元测试通过。
 - `cargo test -- --ignored`：2/2 真实媒体集成测试通过。
-- Tauri release/NSIS：通过，生成双语 `release/BitBento-Setup.exe`（47,938,906 bytes，SHA-256 `05452438634f36d0881a55ee465228bc2a68c0cd72a3f921a372c0fd6355ce4c`）。安装器包含 English / 简体中文并按 Windows 当前语言预选。
-- 便携主程序：10,862,592 bytes，SHA-256 `23cf58de8fac4d4de251b88099720b35c0463f06e6daa129c1102cb285f6ac63`。
+- Tauri release/NSIS：通过，生成双语 `release/BitBento-Setup.exe`（47,948,948 bytes，SHA-256 `b0371949fdb715cbf421df5fab6e4bc95024125c46376c9e1a75c2a40b605459`）。安装器包含 English / 简体中文并按 Windows 当前语言预选。
+- 便携主程序：10,862,592 bytes，SHA-256 `970329415897cd7d5bb47f14330b7b5ac67cb132fd202f5d61b2c15872b6539a`。
 - 便携版：在 PATH 仅含 `C:\Windows\System32;C:\Windows` 的环境中启动并完成真实编码，未依赖全局 Node.js、Rust 或 FFmpeg。
 - 安装版：静默安装、安装后启动、真实编码及静默卸载均通过；卸载移除了程序和 sidecar，保留用户输出及本地日志。
 - Windows 子进程：FFmpeg、ffprobe 与 taskkill 全部经过统一 `CREATE_NO_WINDOW` 启动器；启动、探测、预览、编码、校验和取消不再创建控制台窗口。
@@ -45,6 +45,8 @@
 - 修改批量文件名后缀、输出目录或硬件选项后，已保存文件仍保持绿色勾和选中状态，并重新计算输出路径。
 - 默认硬件为 NVIDIA NVENC；本机不可用时才回退到自动选择。
 - 队列已移除“独立 MP4 文件”等冗余描述，并显示实际编码器。
+- 队列参数在分辨率后显示实际输出帧率。发布版混合横竖任务分别显示 `1280×720 · 60 FPS`、`720×1280 · 60 FPS`，与输出文件的 ffprobe 结果一致。
+- 播放预览的文件名已移到视频框下方；发布版 DOM 回归确认文件名不是预览框的子元素，视频画面和控件不再被文件名覆盖。
 - “良好”和“优秀”使用不同绿色；批量后缀区域不再额外显示 `.mp4`。
 - 应用内简体中文/English 可即时切换并记忆选择；英文文案采用独立撰写。关于页按分区布局展示 BitBento Logo、Steve Chou、版本、核心技术、GitHub 项目主页、MIT License、第三方开源声明和免费软件声明；许可证弹层及第三方声明弹层均通过发布版 WebView 验证。
 - 使用说明已删除“批量输出设置可随时调整，不会清除已保存状态。”，发布版 DOM 复验不存在该句。

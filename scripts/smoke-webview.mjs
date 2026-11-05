@@ -107,6 +107,7 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
   ui021 = await evaluate(`(async()=>{
     const video=document.getElementById('videoPreview');
     const stage=document.querySelector('.preview-stage');
+    const stageName=document.getElementById('stageName');
     const videoRect=video.getBoundingClientRect(),stageRect=stage.getBoundingClientRect();
     const portraitVideo={width:video.videoWidth,height:video.videoHeight,readyState:video.readyState,objectFit:getComputedStyle(video).objectFit,objectPosition:getComputedStyle(video).objectPosition,renderedWidth:videoRect.width,renderedHeight:videoRect.height,portraitClass:video.classList.contains('portrait')};
     document.querySelector('[data-mode="pro"]').click();
@@ -154,7 +155,7 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
     document.getElementById('thirdPartyModal').classList.remove('open');
     return {
       video:portraitVideo,
-      stage:{width:stageRect.width,height:stageRect.height,innerHeight:stage.clientHeight},
+      stage:{width:stageRect.width,height:stageRect.height,innerHeight:stage.clientHeight,filenameOutside:!stage.contains(stageName)&&stage.nextElementSibling===stageName},
       portraitOptions,landscapeOptions,portraitEstimate,landscapeEstimate,configured,lowQuality,excellentQuality,
       aboutState,licenseOpen,thirdPartyOpen,
       guideHasRemovedSentence:document.getElementById('guideModal').textContent.includes('批量输出设置可随时调整，不会清除已保存状态。')
@@ -162,7 +163,7 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
   })()`);
   const portraitValues=ui021.portraitOptions.map(option=>option.value).join(',');
   const landscapeValues=ui021.landscapeOptions.map(option=>option.value).join(',');
-  if(ui021.video.width!==360||ui021.video.height!==640||ui021.video.objectFit!=='contain'||ui021.video.readyState<1||!ui021.video.portraitClass||Math.abs(ui021.video.renderedHeight-ui021.stage.innerHeight)>1||ui021.video.renderedWidth>=ui021.stage.width||ui021.stage.width<=ui021.stage.height||portraitValues!=='same,2160x3840,1440x2560,1080x1920,720x1280'||landscapeValues!=='same,3840x2160,2560x1440,1920x1080,1280x720'||ui021.portraitEstimate!=='1080×1920'||ui021.landscapeEstimate!=='1920×1080'||ui021.configured!=='2'||ui021.lowQuality.className!=='quality-low'||ui021.excellentQuality.className!=='quality-excellent'||ui021.lowQuality.color===ui021.excellentQuality.color||!ui021.aboutState.open||ui021.aboutState.version!=='Version 0.2.1'||!ui021.aboutState.developer?.includes('Steve Chou')||!ui021.aboutState.homepage?.includes('GitHub')||!ui021.aboutState.githubLogo||!ui021.aboutState.freeNotice?.includes('无需购买、订阅或支付任何费用')||!ui021.licenseOpen||!ui021.thirdPartyOpen||ui021.guideHasRemovedSentence)throw new Error(`0.2.1 UI regression: ${JSON.stringify(ui021)}`);
+  if(ui021.video.width!==360||ui021.video.height!==640||ui021.video.objectFit!=='contain'||ui021.video.readyState<1||!ui021.video.portraitClass||Math.abs(ui021.video.renderedHeight-ui021.stage.innerHeight)>1||ui021.video.renderedWidth>=ui021.stage.width||ui021.stage.width<=ui021.stage.height||!ui021.stage.filenameOutside||portraitValues!=='same,2160x3840,1440x2560,1080x1920,720x1280'||landscapeValues!=='same,3840x2160,2560x1440,1920x1080,1280x720'||ui021.portraitEstimate!=='1080×1920'||ui021.landscapeEstimate!=='1920×1080'||ui021.configured!=='2'||ui021.lowQuality.className!=='quality-low'||ui021.excellentQuality.className!=='quality-excellent'||ui021.lowQuality.color===ui021.excellentQuality.color||!ui021.aboutState.open||ui021.aboutState.version!=='Version 0.2.1'||!ui021.aboutState.developer?.includes('Steve Chou')||!ui021.aboutState.homepage?.includes('GitHub')||!ui021.aboutState.githubLogo||!ui021.aboutState.freeNotice?.includes('无需购买、订阅或支付任何费用')||!ui021.licenseOpen||!ui021.thirdPartyOpen||ui021.guideHasRemovedSentence)throw new Error(`0.2.1 UI regression: ${JSON.stringify(ui021)}`);
   if(process.env.BITBENTO_CAPTURE_UI==='1'){
     const capture=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
     await fs.writeFile(path.join(process.cwd(),'test-media','about-0.2.1.png'),Buffer.from(capture.data,'base64'));
@@ -175,6 +176,7 @@ if (process.env.BITBENTO_TEST_MIXED_OUTPUT === '1') {
     const runRound=async()=>{
       document.getElementById('addQueue').click();
       await new Promise(resolve=>setTimeout(resolve,400));
+      const queueDetails=[...document.querySelectorAll('.queue-item>div:nth-child(2)>div:first-child')].map(element=>element.textContent);
       const outputs=[];
       const completed=new Promise(async(resolve,reject)=>{
         const timeout=setTimeout(()=>reject(new Error('mixed queue timed out')),90000);
@@ -185,7 +187,7 @@ if (process.env.BITBENTO_TEST_MIXED_OUTPUT === '1') {
       const media=await Promise.all(outputs.map(path=>invoke('probe_media',{path})));
       document.getElementById('clearQueue').click();
       await new Promise(resolve=>setTimeout(resolve,300));
-      return media.map(item=>({filename:item.filename,width:item.width,height:item.height})).sort((a,b)=>a.width-b.width);
+      return {queueDetails,media:media.map(item=>({filename:item.filename,width:item.width,height:item.height,frameRate:item.frameRate})).sort((a,b)=>a.width-b.width)};
     };
     const fromPortrait=await runRound();
     const landscapeFile=[...document.querySelectorAll('.file[data-id]')].find(file=>file.textContent.includes("测试 视频 O'Brien.mp4"));
@@ -198,7 +200,7 @@ if (process.env.BITBENTO_TEST_MIXED_OUTPUT === '1') {
     const fromLandscape=await runRound();
     return {fromPortrait,fromLandscape};
   })()`);
-  for(const round of [mixedOutputs.fromPortrait,mixedOutputs.fromLandscape])if(round.length!==2||round[0].width!==720||round[0].height!==1280||round[1].width!==1280||round[1].height!==720)throw new Error(`mixed orientation outputs failed: ${JSON.stringify(mixedOutputs)}`);
+  for(const round of [mixedOutputs.fromPortrait,mixedOutputs.fromLandscape])if(round.media.length!==2||round.media[0].width!==720||round.media[0].height!==1280||Math.abs(round.media[0].frameRate-60)>.01||round.media[1].width!==1280||round.media[1].height!==720||Math.abs(round.media[1].frameRate-60)>.01||round.queueDetails.length!==2||round.queueDetails.some(detail=>!detail.includes('60 FPS'))||!round.queueDetails.some(detail=>detail.includes('720×1280 · 60 FPS'))||!round.queueDetails.some(detail=>detail.includes('1280×720 · 60 FPS')))throw new Error(`mixed orientation outputs failed: ${JSON.stringify(mixedOutputs)}`);
 }
 if (process.env.BITBENTO_TEST_COMPAT === '1') {
   const mkvPath = path.join(process.cwd(), 'test-media', '长路径测试_abcdefghijklmnopqrstuvwxyz_0123456789', '第二层_日本語とスペース_abcdefghijklmnopqrstuvwxyz', '长路径 样本.mkv');

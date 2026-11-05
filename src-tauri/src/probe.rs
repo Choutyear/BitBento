@@ -21,6 +21,24 @@ fn parse_u64(value: Option<&Value>) -> Option<u64> {
     value.and_then(|v| v.as_str()).and_then(|v| v.parse().ok())
 }
 
+fn display_dimensions(video: &Value) -> (u32, u32) {
+    let width = video["width"].as_u64().unwrap_or_default() as u32;
+    let height = video["height"].as_u64().unwrap_or_default() as u32;
+    let tag_rotation = video["tags"]["rotate"]
+        .as_str()
+        .and_then(|value| value.parse::<i32>().ok());
+    let side_data_rotation = video["side_data_list"]
+        .as_array()
+        .and_then(|entries| entries.iter().find_map(|entry| entry["rotation"].as_i64()))
+        .map(|value| value as i32);
+    let rotation = side_data_rotation.or(tag_rotation).unwrap_or_default();
+    if rotation.rem_euclid(180) == 90 {
+        (height, width)
+    } else {
+        (width, height)
+    }
+}
+
 pub async fn ffprobe_json(path: &Path) -> Result<Value, AppError> {
     if !path.is_file() {
         return Err(AppError::Probe("文件不存在或无法访问。".into()));
@@ -109,6 +127,7 @@ pub async fn probe(path: &Path) -> Result<MediaInfo, AppError> {
         format_names
     }
     .to_string();
+    let (display_width, display_height) = display_dimensions(video);
 
     Ok(MediaInfo {
         id: Uuid::new_v4().to_string(),
@@ -119,8 +138,8 @@ pub async fn probe(path: &Path) -> Result<MediaInfo, AppError> {
         size_bytes: metadata.len(),
         duration_ms: (duration_seconds * 1000.0).round() as u64,
         video_codec: normalize_video_codec(video["codec_name"].as_str().unwrap_or("unknown")),
-        width: video["width"].as_u64().unwrap_or_default() as u32,
-        height: video["height"].as_u64().unwrap_or_default() as u32,
+        width: display_width,
+        height: display_height,
         frame_rate: avg,
         frame_rate_text,
         variable_frame_rate: variable,
@@ -160,6 +179,18 @@ pub fn normalize_audio_codec(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn display_dimensions_honor_rotation_metadata() {
+        let landscape = json!({"width": 1920, "height": 1080});
+        let tag_rotated = json!({"width": 1920, "height": 1080, "tags": {"rotate": "90"}});
+        let side_data_rotated =
+            json!({"width": 1920, "height": 1080, "side_data_list": [{"rotation": -90}]});
+        assert_eq!(display_dimensions(&landscape), (1920, 1080));
+        assert_eq!(display_dimensions(&tag_rotated), (1080, 1920));
+        assert_eq!(display_dimensions(&side_data_rotated), (1080, 1920));
+    }
 
     #[tokio::test]
     #[ignore = "requires prepared FFprobe sidecar and generated real media"]

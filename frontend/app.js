@@ -30,12 +30,14 @@
     const en=state.language==='en'; document.documentElement.lang=en?'en':'zh-CN'; document.title=en?'BitBento · Local Video Compression':'BitBento · 本地视频压缩'; $('languageSelect').value=state.language;
     const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT); let node;
     while((node=walker.nextNode())){if(node.parentElement?.closest('script'))continue;if(!originalText.has(node))originalText.set(node,node.nodeValue);const source=originalText.get(node),trim=source.trim();if(!trim)continue;const translated=en&&english[trim]?english[trim]:trim;node.nodeValue=source.replace(trim,translated);}
+    updateResolutionOptions(active());
   }
   const tr=(zh,en)=>state.language==='en'?en:zh;
   const hardwareLabel=mode=>mode==='auto'?tr('自动选择','Auto'):mode==='cpu'?tr('CPU 软件编码','CPU software'):hardwareLabels[mode]||mode;
   const statusLabel=status=>state.language==='en'?({queued:'Queued',encoding:'Encoding',encodingPass1:'Pass 1',encodingPass2:'Pass 2',verifying:'Verifying',completed:'Completed',failed:'Failed',cancelled:'Cancelled'}[status]||status):(labels[status]||status);
   const active = () => state.files.find(f => f.media.id === state.activeId) || null;
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+  const normalizeMediaPath = value => String(value ?? '').replace(/^\\\\\?\\/,'').replaceAll('/','\\').toLowerCase();
   const fmtBytes = bytes => bytes >= 1073741824 ? `${(bytes / 1073741824).toFixed(2)} GB` : `${Math.max(0, Math.round(bytes / 1048576))} MB`;
   const fmtTime = ms => { const seconds = Math.max(0, Math.round((ms || 0) / 1000)); return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`; };
   const uuid = () => crypto.randomUUID();
@@ -56,13 +58,44 @@
     };
   }
 
+  const isPortrait = media => Boolean(media && media.height > media.width);
+
+  function orientSettingsForMedia(settings, media) {
+    const oriented={...settings};
+    if (oriented.mode !== 'professional' || !oriented.width || !oriented.height || oriented.width === oriented.height) return oriented;
+    const targetPortrait=oriented.height > oriented.width;
+    if (isPortrait(media) !== targetPortrait) [oriented.width,oriented.height]=[oriented.height,oriented.width];
+    return oriented;
+  }
+
+  function updateResolutionOptions(item=active(), desiredSettings=null) {
+    const select=$('resolution'); if (!select) return;
+    const selectedPreset=select.selectedOptions[0]?.dataset.preset || '4K';
+    const portrait=isPortrait(item?.media);
+    for (const option of select.options) {
+      if (option.dataset.preset === 'same') { option.value='same'; option.textContent=tr('与原视频一致','Same as source'); continue; }
+      const long=Number(option.dataset.long), short=Number(option.dataset.short); if (!long || !short) continue;
+      const width=portrait?short:long, height=portrait?long:short;
+      option.value=`${width}x${height}`;
+      option.textContent=`${option.dataset.preset}${state.language==='en'?' (':'（'}${width} × ${height}${state.language==='en'?')':'）'}`;
+    }
+    if (desiredSettings?.width && desiredSettings?.height) {
+      const oriented=orientSettingsForMedia(desiredSettings,item.media);
+      select.value=`${oriented.width}x${oriented.height}`;
+    } else {
+      const option=[...select.options].find(candidate=>candidate.dataset.preset===selectedPreset);
+      select.value=option?.value || 'same';
+    }
+  }
+
   function updatePreview(item) {
     const video = $('videoPreview'), empty = $('previewEmpty');
     if (!item) {
       video.pause(); video.removeAttribute('src'); video.load(); delete video.dataset.mediaId;
-      video.classList.remove('ready'); empty.style.display='block'; empty.textContent=tr('添加视频后可在此播放预览','Add a video to preview it here.');
+      video.classList.remove('ready','portrait'); empty.style.display='block'; empty.textContent=tr('添加视频后可在此播放预览','Add a video to preview it here.');
       return;
     }
+    video.classList.toggle('portrait',isPortrait(item.media));
     if (video.dataset.mediaId === item.media.id) return;
     video.pause(); video.classList.remove('ready'); empty.style.display='block'; empty.textContent=tr('正在加载本地视频预览…','Loading local video preview…');
     video.dataset.mediaId=item.media.id; delete video.dataset.compatAttempted;
@@ -83,7 +116,7 @@
     const supported = paths.filter(p => /\.(mp4|mov|mkv|webm|m4v|avi)$/i.test(p));
     let added = 0;
     for (const path of supported) {
-      if (state.files.some(f => f.media.path.toLowerCase() === path.toLowerCase())) continue;
+      if (state.files.some(f => normalizeMediaPath(f.media.path) === normalizeMediaPath(path))) continue;
       try { const media = await invoke('probe_media', { path }); state.files.push({ media, configured:false, selected:false, dirty:false, settings:null, estimate:null }); added++; }
       catch (error) { toast(`无法读取 ${path.split(/[\\/]/).pop()}：${errorText(error)}`, true); }
     }
@@ -95,7 +128,7 @@
       const mediaItems = await invoke('select_media_files');
       let added = 0;
       for (const media of mediaItems) {
-        if (!state.files.some(f => f.media.path.toLowerCase() === media.path.toLowerCase())) { state.files.push({ media, configured:false, selected:false, dirty:false, settings:null, estimate:null }); added++; }
+        if (!state.files.some(f => normalizeMediaPath(f.media.path) === normalizeMediaPath(media.path))) { state.files.push({ media, configured:false, selected:false, dirty:false, settings:null, estimate:null }); added++; }
       }
       if (added) { state.activeId = state.files.at(-1).media.id; initializeControls(active()); renderAll(); toast(`已读取 ${added} 个真实视频`); }
     } catch (error) { toast(errorText(error), true); }
@@ -103,6 +136,7 @@
 
   function initializeControls(item) {
     if (!item) return;
+    updateResolutionOptions(item,item.settings);
     if (item.settings) { loadSettings(item.settings); return; }
     const targetMb = Math.max(1, Math.round(item.media.sizeBytes / 1048576 * .35));
     $('targetInput').value = targetMb; $('targetSlider').value = 35; $('targetInput').max = Math.ceil(item.media.sizeBytes / 1048576 * 2);
@@ -138,12 +172,13 @@
   }
 
   function loadSettings(settings) {
+    settings=orientSettingsForMedia(settings,active().media);
     state.mode = settings.mode; state.strict = settings.strictTarget;
     $('strictToggle').classList.toggle('on', state.strict);
     $('format').value = settings.container;
     $('codec').value = settings.videoCodec;
     if (settings.bitrateKbps) $('bitrateSlider').value = settings.bitrateKbps / 1000;
-    $('resolution').value = settings.width ? `${settings.width}x${settings.height}` : 'same';
+    updateResolutionOptions(active(),settings); $('resolution').value = settings.width ? `${settings.width}x${settings.height}` : 'same';
     $('fps').value = settings.frameRate ? String(settings.frameRate) : 'same';
     $('audio').value = settings.audioMode === 'remove' ? 'remove' : settings.audioMode === 'same' ? 'same' : `aac${settings.audioBitrateKbps||192}`;
     if (settings.targetBytes) $('targetInput').value = Math.round(settings.targetBytes / 1048576);
@@ -152,7 +187,7 @@
 
   async function calculate(item = active(), settings = currentSettings(item)) {
     if (!item || !settings) return null;
-    return invoke('estimate_job', { media:item.media, settings });
+    return invoke('estimate_job', { media:item.media, settings:orientSettingsForMedia(settings,item.media) });
   }
 
   function markDirty() {
@@ -233,7 +268,7 @@
   function renderAll(){ renderFiles(); renderQueue(); updateDetail(); }
 
   async function saveItem(item, settings) {
-    const estimate = await calculate(item, settings); item.settings=structuredClone(settings); item.estimate=estimate; item.configured=true; item.selected=true; item.dirty=false; return estimate;
+    const oriented=orientSettingsForMedia(settings,item.media); const estimate = await calculate(item, oriented); item.settings=structuredClone(oriented); item.estimate=estimate; item.configured=true; item.selected=true; item.dirty=false; return estimate;
   }
 
   async function applyBatchSettings() {

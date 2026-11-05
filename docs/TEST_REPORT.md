@@ -11,8 +11,8 @@
 - `cargo clippy --all-targets -- -D warnings`：通过。
 - `cargo test`：2/2 单元测试通过。
 - `cargo test -- --ignored`：2/2 真实媒体集成测试通过。
-- Tauri release/NSIS：通过，生成双语 `release/BitBento-Setup.exe`（47,941,492 bytes，SHA-256 `06146ed408bb226caca7ed87ba8b19b5d2f4a68228212b9144533ddf308259c1`）。安装器包含 English / 简体中文并按 Windows 当前语言预选。
-- 便携主程序：10,872,832 bytes，SHA-256 `a56d0dbaf61c0fa4eb785297c8a107fd33ef33e5d7d89648f6aa9570a8f31fd7`。
+- Tauri release/NSIS：通过，生成双语 `release/BitBento-Setup.exe`（47,939,670 bytes，SHA-256 `2dcc58e0f2cf2acb5a68998cf754e2deb7070534cfc8356664022cb06962f1f4`）。安装器包含 English / 简体中文并按 Windows 当前语言预选。
+- 便携主程序：10,862,080 bytes，SHA-256 `a6d56e47068364727c667d2b159aec170ffa7ba40db78c63493bc9b2eacc3866`。
 - 便携版：在 PATH 仅含 `C:\Windows\System32;C:\Windows` 的环境中启动并完成真实编码，未依赖全局 Node.js、Rust 或 FFmpeg。
 - 安装版：静默安装、安装后启动、真实编码及静默卸载均通过；卸载移除了程序和 sidecar，保留用户输出及本地日志。
 - Windows 子进程：FFmpeg、ffprobe 与 taskkill 全部经过统一 `CREATE_NO_WINDOW` 启动器；启动、探测、预览、编码、校验和取消不再创建控制台窗口。
@@ -27,7 +27,10 @@
 - WebM：`web sample.webm`，VP9/Opus，30 fps，5.008 秒。
 - VFR MP4：`手机 VFR 样本.mp4`，`r_frame_rate=120/1`、`avg_frame_rate=54000000/2008333`；UI/后端标记为可变帧率，没有显示伪造的恒定帧率。
 - 本地播放：MP4/H.264 通过受限媒体协议直接播放，`readyState=4`、时长 6 秒；长路径 MKV/HEVC 通过离线 H.264/AAC 兼容预览加载，`readyState=4`、时长 5 秒。
-- 竖版 MP4：`portrait-360x640.mp4`，H.264/AAC，360×640，30 fps，3 秒；发布版 WebView 实测 `videoWidth=360`、`videoHeight=640`、`object-fit=contain`、居中显示，651×350 的固定预览框保持不变并在两侧保留黑边，没有拉伸画面。
+- 竖版 MP4：`portrait-360x640.mp4`，H.264/AAC，360×640，30 fps，3 秒；发布版 WebView 中固定预览框内高为 348 px，竖版 `<video>` 实际渲染为约 196×348 px，高度与横版预览框内竖边一致，水平居中并在两侧留黑，没有裁切或拉伸。
+- 竖版专业预设：发布版 UI 实测为 4K `2160×3840`、2K `1440×2560`、1080p `1080×1920`、720p `720×1280`；切回横版文件后自动恢复对应横版尺寸。混合横竖批量“应用到全部”逐文件定向，预计输出分别为 `1080×1920` 和 `1920×1080`。
+- 竖版实际编码：把横向形式的 720p 预设请求应用到 360×640 源视频，Rust 后端自动解析为 `720×1280`，内置 FFmpeg 完成编码后由 ffprobe 复核输出确为 `720×1280`。旋转标签及 display matrix 的 ±90° 元数据也有单元测试覆盖。
+- Windows 扩展路径 `\\?\` 与普通路径会在前端去重前统一规范化；完整回归中重复拖入同一横版文件后仍只有两个横竖媒体条目，没有产生重复队列源。
 
 特殊字符、中文、日文、空格、撇号和长路径均通过 probe/encode 测试。原文件哈希和内容未被修改。
 
@@ -44,6 +47,7 @@
 - 应用内简体中文/English 可即时切换并记忆选择；英文文案采用独立撰写。关于页按分区布局展示 BitBento Logo、Steve Chou、版本、核心技术、GitHub 项目主页、MIT License、第三方开源声明和免费软件声明；许可证弹层及第三方声明弹层均通过发布版 WebView 验证。
 - 使用说明已删除“批量输出设置可随时调整，不会清除已保存状态。”，发布版 DOM 复验不存在该句。
 - 公开 GitHub 项目主页 `https://github.com/Choutyear/BitBento` 已创建并经 GitHub API 验证；软件通过后端固定白名单命令打开该地址，不接受前端传入任意 URL。
+- “关于”中的项目主页入口已替换为标准 GitHub Mark，并经发布版截图及 DOM 验证。
 - 封装/编码兼容矩阵：通过。
 - 不可能目标：编码前拒绝，单元测试通过。
 - 严格目标：请求 600,000 bytes，自动模式实际选择 `hevc_nvenc`，最终发布版输出 590,739 bytes；输出校验通过且 H.265/AAC 音视频流完整。

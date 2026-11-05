@@ -61,6 +61,25 @@ fn compatible(container: &str, codec: &str) -> bool {
     }
 }
 
+fn resolved_dimensions(media: &MediaInfo, settings: &OutputSettings) -> (u32, u32) {
+    if settings.mode == EncodeMode::TargetSize {
+        return (media.width, media.height);
+    }
+    let (mut width, mut height) = (
+        settings.width.unwrap_or(media.width),
+        settings.height.unwrap_or(media.height),
+    );
+    let (long, short) = (width.max(height), width.min(height));
+    let is_resolution_preset = matches!(
+        (long, short),
+        (3840, 2160) | (2560, 1440) | (1920, 1080) | (1280, 720)
+    );
+    if is_resolution_preset && (media.height > media.width) != (height > width) {
+        std::mem::swap(&mut width, &mut height);
+    }
+    (width, height)
+}
+
 pub fn estimate(media: &MediaInfo, settings: &OutputSettings) -> Result<EstimateResult, AppError> {
     if media.duration_ms == 0 {
         return Err(AppError::InvalidSettings(
@@ -161,6 +180,7 @@ pub fn estimate(media: &MediaInfo, settings: &OutputSettings) -> Result<Estimate
     } else {
         format!("AAC {audio_kbps} kbps")
     };
+    let (resolved_width, resolved_height) = resolved_dimensions(media, settings);
     Ok(EstimateResult {
         estimated_bytes,
         video_bitrate_kbps: video_kbps,
@@ -168,16 +188,8 @@ pub fn estimate(media: &MediaInfo, settings: &OutputSettings) -> Result<Estimate
         output_path: final_path.to_string_lossy().to_string(),
         resolved_container: container,
         resolved_video_codec: codec,
-        resolved_width: if settings.mode == EncodeMode::TargetSize {
-            media.width
-        } else {
-            settings.width.unwrap_or(media.width)
-        },
-        resolved_height: if settings.mode == EncodeMode::TargetSize {
-            media.height
-        } else {
-            settings.height.unwrap_or(media.height)
-        },
+        resolved_width,
+        resolved_height,
         resolved_frame_rate: if settings.mode == EncodeMode::TargetSize {
             media.frame_rate
         } else {
@@ -360,7 +372,7 @@ async fn run_two_pass(
         "-i".into(),
         job.media.path.clone(),
     ];
-    append_video_filters(&mut pass1, &job.settings);
+    append_video_filters(&mut pass1, &job.settings, &job.estimate);
     pass1.extend([
         "-map".into(),
         "0:v:0".into(),
@@ -423,7 +435,7 @@ fn common_args(
         "-map".into(),
         "0:a:0?".into(),
     ];
-    append_video_filters(&mut args, &job.settings);
+    append_video_filters(&mut args, &job.settings, &job.estimate);
     args.extend([
         "-c:v".into(),
         encoder.into(),
@@ -484,11 +496,16 @@ fn is_hardware_encoder(encoder: &str) -> bool {
     encoder.ends_with("_nvenc") || encoder.ends_with("_qsv") || encoder.ends_with("_amf")
 }
 
-fn append_video_filters(args: &mut Vec<String>, settings: &OutputSettings) {
+fn append_video_filters(
+    args: &mut Vec<String>,
+    settings: &OutputSettings,
+    estimate: &EstimateResult,
+) {
     if settings.mode == EncodeMode::TargetSize {
         return;
     }
-    if let (Some(width), Some(height)) = (settings.width, settings.height) {
+    if settings.width.is_some() && settings.height.is_some() {
+        let (width, height) = (estimate.resolved_width, estimate.resolved_height);
         args.extend(["-vf".into(), format!("scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2")]);
     }
     if let Some(fps) = settings.frame_rate {
@@ -757,6 +774,35 @@ mod tests {
     }
 
     #[test]
+    fn professional_presets_follow_source_orientation() {
+        let (mut media, path) = fixture();
+        media.width = 360;
+        media.height = 640;
+        let mut settings = target_settings(10_000_000);
+        settings.mode = EncodeMode::Professional;
+        settings.bitrate_kbps = Some(2_000);
+        settings.target_bytes = None;
+        settings.width = Some(1920);
+        settings.height = Some(1080);
+        let portrait = estimate(&media, &settings).unwrap();
+        assert_eq!(
+            (portrait.resolved_width, portrait.resolved_height),
+            (1080, 1920)
+        );
+
+        media.width = 640;
+        media.height = 360;
+        settings.width = Some(1080);
+        settings.height = Some(1920);
+        let landscape = estimate(&media, &settings).unwrap();
+        assert_eq!(
+            (landscape.resolved_width, landscape.resolved_height),
+            (1920, 1080)
+        );
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
     fn impossible_target_is_rejected_before_encoding() {
         let (media, path) = fixture();
         let error = estimate(&media, &target_settings(500_000))
@@ -772,7 +818,8 @@ mod tests {
         let project = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
         let input = project.join("test-media").join("测试 视频 O'Brien.mp4");
         let webm_input = project.join("test-media").join("web sample.webm");
-        assert!(input.is_file() && webm_input.is_file());
+        let portrait_input = project.join("test-media").join("portrait-360x640.mp4");
+        assert!(input.is_file() && webm_input.is_file() && portrait_input.is_file());
 
         let hardware = crate::hardware::detect().await.unwrap();
         let state = AppState::default();
@@ -843,6 +890,53 @@ mod tests {
         assert_eq!(pro_verified.container, "WebM");
         assert_eq!(pro_verified.video_codec, "VP9");
         assert_eq!((pro_verified.width, pro_verified.height), (1280, 720));
+
+        let portrait_media = crate::probe::probe(&portrait_input).await.unwrap();
+        let portrait_settings = OutputSettings {
+            mode: EncodeMode::Professional,
+            container: "MP4".into(),
+            video_codec: "H.264".into(),
+            bitrate_kbps: Some(700),
+            width: Some(1280),
+            height: Some(720),
+            frame_rate: Some(30.0),
+            audio_mode: "aac".into(),
+            audio_bitrate_kbps: Some(96),
+            target_bytes: None,
+            strict_target: false,
+            hardware_mode: "cpu".into(),
+            suffix: "_portrait_test".into(),
+            output_directory_mode: "source".into(),
+            custom_output_directory: None,
+        };
+        let portrait_estimate = estimate(&portrait_media, &portrait_settings).unwrap();
+        assert_eq!(
+            (
+                portrait_estimate.resolved_width,
+                portrait_estimate.resolved_height
+            ),
+            (720, 1280)
+        );
+        let portrait_job = EncodeJob {
+            id: uuid::Uuid::new_v4().to_string(),
+            media: portrait_media,
+            settings: portrait_settings,
+            estimate: portrait_estimate,
+            state: "queued".into(),
+            progress: 0.0,
+            error: None,
+        };
+        let portrait_output = encode_job(None, &state, &portrait_job, &hardware)
+            .await
+            .unwrap();
+        let portrait_verified = crate::probe::probe(Path::new(&portrait_output))
+            .await
+            .unwrap();
+        assert_eq!(
+            (portrait_verified.width, portrait_verified.height),
+            (720, 1280)
+        );
+        let _ = std::fs::remove_file(portrait_output);
 
         let cancel_settings = OutputSettings {
             mode: EncodeMode::Professional,

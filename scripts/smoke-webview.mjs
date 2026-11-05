@@ -101,11 +101,27 @@ if (process.env.BITBENTO_TEST_UI_020 === '1') {
 }
 if (process.env.BITBENTO_TEST_UI_021 === '1') {
   const portraitPath = path.join(process.cwd(), 'test-media', 'portrait-360x640.mp4');
-  await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(portraitPath)}] })`);
+  await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(mediaPath)},${JSON.stringify(portraitPath)}] })`);
   await new Promise(resolve => setTimeout(resolve, 1800));
   ui021 = await evaluate(`(async()=>{
     const video=document.getElementById('videoPreview');
     const stage=document.querySelector('.preview-stage');
+    const videoRect=video.getBoundingClientRect(),stageRect=stage.getBoundingClientRect();
+    const portraitVideo={width:video.videoWidth,height:video.videoHeight,readyState:video.readyState,objectFit:getComputedStyle(video).objectFit,objectPosition:getComputedStyle(video).objectPosition,renderedWidth:videoRect.width,renderedHeight:videoRect.height,portraitClass:video.classList.contains('portrait')};
+    document.querySelector('[data-mode="pro"]').click();
+    await new Promise(resolve=>setTimeout(resolve,250));
+    const resolution=document.getElementById('resolution');
+    const portraitOptions=[...resolution.options].map(option=>({preset:option.dataset.preset,value:option.value,text:option.textContent}));
+    resolution.value='1080x1920';resolution.dispatchEvent(new Event('input',{bubbles:true}));
+    document.getElementById('saveAll').click();
+    await new Promise(resolve=>setTimeout(resolve,1200));
+    const portraitEstimate=document.getElementById('cmpResNew').textContent;
+    const configured=document.getElementById('configuredCount').textContent;
+    const landscapeFile=[...document.querySelectorAll('.file[data-id]')].find(file=>file.textContent.includes("测试 视频 O'Brien.mp4"));
+    landscapeFile.click();
+    await new Promise(resolve=>setTimeout(resolve,600));
+    const landscapeEstimate=document.getElementById('cmpResNew').textContent;
+    const landscapeOptions=[...resolution.options].map(option=>({preset:option.dataset.preset,value:option.value,text:option.textContent}));
     const about=document.getElementById('aboutModal');
     document.getElementById('aboutButton').click();
     const aboutState={
@@ -113,6 +129,7 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
       version:about.querySelector('.about-version')?.textContent,
       developer:[...about.querySelectorAll('.about-fact')].find(row=>row.textContent.includes('开发者'))?.textContent,
       homepage:document.getElementById('projectHomepage')?.textContent,
+      githubLogo:Boolean(document.querySelector('#projectHomepage svg path')),
       freeNotice:about.querySelector('.free-notice')?.textContent
     };
     document.getElementById('licenseButton').click();
@@ -122,13 +139,16 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
     document.getElementById('licenseModal').classList.remove('open');
     document.getElementById('thirdPartyModal').classList.remove('open');
     return {
-      video:{width:video.videoWidth,height:video.videoHeight,readyState:video.readyState,objectFit:getComputedStyle(video).objectFit,objectPosition:getComputedStyle(video).objectPosition},
-      stage:{width:stage.getBoundingClientRect().width,height:stage.getBoundingClientRect().height},
+      video:portraitVideo,
+      stage:{width:stageRect.width,height:stageRect.height,innerHeight:stage.clientHeight},
+      portraitOptions,landscapeOptions,portraitEstimate,landscapeEstimate,configured,
       aboutState,licenseOpen,thirdPartyOpen,
       guideHasRemovedSentence:document.getElementById('guideModal').textContent.includes('批量输出设置可随时调整，不会清除已保存状态。')
     };
   })()`);
-  if(ui021.video.width!==360||ui021.video.height!==640||ui021.video.objectFit!=='contain'||ui021.video.readyState<1||ui021.stage.width<=ui021.stage.height||!ui021.aboutState.open||ui021.aboutState.version!=='Version 0.2.1'||!ui021.aboutState.developer?.includes('Steve Chou')||!ui021.aboutState.homepage?.includes('GitHub')||!ui021.aboutState.freeNotice?.includes('无需购买、订阅或支付任何费用')||!ui021.licenseOpen||!ui021.thirdPartyOpen||ui021.guideHasRemovedSentence)throw new Error(`0.2.1 UI regression: ${JSON.stringify(ui021)}`);
+  const portraitValues=ui021.portraitOptions.map(option=>option.value).join(',');
+  const landscapeValues=ui021.landscapeOptions.map(option=>option.value).join(',');
+  if(ui021.video.width!==360||ui021.video.height!==640||ui021.video.objectFit!=='contain'||ui021.video.readyState<1||!ui021.video.portraitClass||Math.abs(ui021.video.renderedHeight-ui021.stage.innerHeight)>1||ui021.video.renderedWidth>=ui021.stage.width||ui021.stage.width<=ui021.stage.height||portraitValues!=='same,2160x3840,1440x2560,1080x1920,720x1280'||landscapeValues!=='same,3840x2160,2560x1440,1920x1080,1280x720'||ui021.portraitEstimate!=='1080×1920'||ui021.landscapeEstimate!=='1920×1080'||ui021.configured!=='2'||!ui021.aboutState.open||ui021.aboutState.version!=='Version 0.2.1'||!ui021.aboutState.developer?.includes('Steve Chou')||!ui021.aboutState.homepage?.includes('GitHub')||!ui021.aboutState.githubLogo||!ui021.aboutState.freeNotice?.includes('无需购买、订阅或支付任何费用')||!ui021.licenseOpen||!ui021.thirdPartyOpen||ui021.guideHasRemovedSentence)throw new Error(`0.2.1 UI regression: ${JSON.stringify(ui021)}`);
   if(process.env.BITBENTO_CAPTURE_UI==='1'){
     const capture=await send('Page.captureScreenshot',{format:'png',captureBeyondViewport:false});
     await fs.writeFile(path.join(process.cwd(),'test-media','about-0.2.1.png'),Buffer.from(capture.data,'base64'));

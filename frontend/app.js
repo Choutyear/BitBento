@@ -29,6 +29,29 @@
     };
   }
 
+  function updatePreview(item) {
+    const video = $('videoPreview'), empty = $('previewEmpty');
+    if (!item) {
+      video.pause(); video.removeAttribute('src'); video.load(); delete video.dataset.mediaId;
+      video.classList.remove('ready'); empty.style.display='block'; empty.textContent='添加视频后可在此播放预览';
+      return;
+    }
+    if (video.dataset.mediaId === item.media.id) return;
+    video.pause(); video.classList.remove('ready'); empty.style.display='block'; empty.textContent='正在加载本地视频预览…';
+    video.dataset.mediaId=item.media.id; delete video.dataset.compatAttempted;
+    video.src=`http://bitbento-media.localhost/${encodeURIComponent(item.media.id)}`;
+    video.onloadedmetadata=()=>{video.classList.add('ready');empty.style.display='none';};
+    video.onerror=async()=>{
+      video.classList.remove('ready');empty.style.display='block';
+      if(video.dataset.compatAttempted==='1'){empty.textContent='无法生成兼容预览，但仍可正常压缩';return;}
+      video.dataset.compatAttempted='1';empty.textContent='系统无法直接播放此编码，正在生成本地兼容预览…';
+      const mediaId=item.media.id;
+      try{const previewId=await invoke('create_compatible_preview',{id:mediaId});if(video.dataset.mediaId!==mediaId)return;video.src=`http://bitbento-media.localhost/${encodeURIComponent(previewId)}`;video.load();}
+      catch(error){if(video.dataset.mediaId===mediaId)empty.textContent=`兼容预览生成失败：${errorText(error)}`;}
+    };
+    video.load();
+  }
+
   async function addPaths(paths) {
     const supported = paths.filter(p => /\.(mp4|mov|mkv|webm|m4v|avi)$/i.test(p));
     let added = 0;
@@ -149,6 +172,7 @@
 
   async function updateDetail() {
     const item = active();
+    updatePreview(item);
     if (!item) { $('stageName').textContent='请添加视频'; ['sourceSize','duration','sourceCodec','sourceResolution','sourceFps','sourceBitrate','sizeOutput','sizeOriginal'].forEach(id => $(id).textContent='—'); $('sizeSaving').textContent='等待参数'; $('sizeFill').style.width='0'; return; }
     const m = item.media, v = mediaView(m), settings = currentSettings(item);
     $('stageName').textContent=m.filename; $('sourceSize').textContent=fmtBytes(m.sizeBytes); $('duration').textContent=fmtTime(m.durationMs); $('sourceCodec').textContent=m.videoCodec; $('sourceResolution').textContent=v.res; $('sourceFps').textContent=v.fps; $('sourceBitrate').textContent=v.bitrate;
@@ -172,7 +196,8 @@
       const e=job.estimate, progress=job.progress||0, done=job.state==='completed';
       const actions = done ? `<span><button class="ghost" data-open="${escapeHtml(job.id)}" title="打开文件">文件</button><button class="ghost" data-folder="${escapeHtml(job.id)}" title="打开所在文件夹">目录</button></span>` : `<button class="remove" data-remove="${escapeHtml(job.id)}" title="${job.state.startsWith('encoding')?'取消任务':'移除任务'}">×</button>`;
       const detail = job.error ? `<details class="qmeta"><summary>技术详情</summary>${escapeHtml(job.error)}</details>` : '';
-      return `<div class="queue-item"><div><strong>${escapeHtml(e.outputPath.split(/[\\/]/).pop())}</strong><div class="qmeta">独立 ${escapeHtml(e.resolvedContainer)} 文件<br>硬件：${escapeHtml(hardwareLabels[job.settings.hardwareMode])}</div>${detail}</div><div><div>${escapeHtml(`${e.resolvedContainer} · ${e.resolvedVideoCodec} · ${e.resolvedWidth}×${e.resolvedHeight}`)}</div><div class="qmeta">${(e.videoBitrateKbps/1000).toFixed(1)} Mbps · ${escapeHtml(e.resolvedAudio)}</div></div><div>预计 ${fmtBytes(e.estimatedBytes)}</div><div class="qstatus">${escapeHtml(labels[job.state]||job.state)}${progress?` ${progress.toFixed(1)}%`:''}<br><span class="qmeta">${job.etaMs?`剩余 ${fmtTime(job.etaMs)}`:''}</span></div>${actions}</div>`;
+      const encoderText=job.effectiveEncoder?`${job.effectiveHardware?'硬件':'软件'}：${job.effectiveEncoder}`:`请求：${hardwareLabels[job.settings.hardwareMode]}`;
+      return `<div class="queue-item"><div><strong>${escapeHtml(e.outputPath.split(/[\\/]/).pop())}</strong><div class="qmeta">独立 ${escapeHtml(e.resolvedContainer)} 文件<br>${escapeHtml(encoderText)}</div>${job.hardwareNotice?`<div class="qmeta">${escapeHtml(job.hardwareNotice)}</div>`:''}${detail}</div><div><div>${escapeHtml(`${e.resolvedContainer} · ${e.resolvedVideoCodec} · ${e.resolvedWidth}×${e.resolvedHeight}`)}</div><div class="qmeta">${(e.videoBitrateKbps/1000).toFixed(1)} Mbps · ${escapeHtml(e.resolvedAudio)}</div></div><div>预计 ${fmtBytes(e.estimatedBytes)}</div><div class="qstatus">${escapeHtml(labels[job.state]||job.state)}${progress?` ${progress.toFixed(1)}%`:''}<br><span class="qmeta">${job.etaMs?`剩余 ${fmtTime(job.etaMs)}`:''}</span></div>${actions}</div>`;
     }).join('') : '<div class="empty-q">队列中还没有任务</div>';
     document.querySelectorAll('[data-remove]').forEach(button => button.onclick=async()=>{ const job=state.queue.find(j=>j.id===button.dataset.remove); try { if (job.state.startsWith('encoding')||job.state==='verifying') await invoke('cancel_job',{id:job.id}); else { await invoke('remove_job',{id:job.id}); state.queue=state.queue.filter(j=>j.id!==job.id); renderQueue(); } } catch(e){toast(errorText(e),true);} });
     document.querySelectorAll('[data-open]').forEach(button => button.onclick=()=>{ const job=state.queue.find(j=>j.id===button.dataset.open); invoke('open_output_file',{path:job.outputPath}).catch(e=>toast(errorText(e),true)); });
@@ -189,14 +214,14 @@
     try {
       state.hardware=await invoke('detect_hardware_encoders');
       for (const mode of ['nvenc','qsv','amf']) { const result=state.hardware.find(h=>h.mode===mode), option=[...$('hardwareAccel').options].find(o=>o.value===mode); option.disabled=!result?.available; option.textContent=`${hardwareLabels[mode]}${result?.available?'':'（不可用）'}`; }
-      const available=state.hardware.filter(h=>h.available&&h.mode!=='cpu').map(h=>h.label); $('accelHint').textContent=available.length?`已验证：${available.join('、')}`:'未发现可初始化的硬件编码器；自动模式将使用 CPU';
+      const available=state.hardware.filter(h=>h.available&&h.mode!=='cpu').map(h=>h.label), unavailable=state.hardware.filter(h=>!h.available&&h.mode!=='cpu').map(h=>`${h.label}：${h.detail}`); const summary=available.length?`已验证：${available.join('、')}`:'未发现可初始化的硬件编码器；自动模式将使用 CPU'; $('accelHint').textContent=[summary,...unavailable].join('；'); $('accelHint').title=unavailable.join('\n');
     } catch(error){$('accelHint').textContent=`硬件检测失败：${errorText(error)}`;}
   }
 
   document.querySelectorAll('.mode-tab').forEach(el=>el.onclick=()=>activateMode(el.dataset.mode==='target'?'targetSize':'professional'));
   $('addVideo').onclick=pickFiles;
   $('selectAll').onclick=()=>{const list=state.files.filter(f=>f.configured), select=!list.length||!list.every(f=>f.selected); list.forEach(f=>f.selected=select); renderFiles();};
-  $('clearFiles').onclick=()=>{state.files=[];state.activeId=null;renderAll();toast('已清空媒体列表');};
+  $('clearFiles').onclick=()=>{const ids=state.files.map(item=>item.media.id);state.files=[];state.activeId=null;renderAll();ids.forEach(id=>invoke('unregister_preview',{id}).catch(()=>{}));toast('已清空媒体列表');};
   $('strictToggle').onclick=()=>{state.strict=!state.strict;$('strictToggle').classList.toggle('on',state.strict);markDirty();updateDetail();};
   $('targetSlider').oninput=()=>{const item=active();if(!item)return;$('targetInput').value=Math.max(1,Math.round(item.media.sizeBytes/1048576*Number($('targetSlider').value)/100));markDirty();updateDetail();};
   $('targetInput').oninput=()=>{const item=active();if(!item)return;$('targetSlider').value=Math.max(10,Math.min(95,Math.round(Number($('targetInput').value)*1048576/item.media.sizeBytes*100)));markDirty();updateDetail();};
@@ -214,6 +239,7 @@
   $('renderAll').onclick=async()=>{if(!state.queue.some(j=>j.state==='queued'))return toast('输出队列中没有等待任务');try{$('progressWrap').style.display='block';state.running=true;await invoke('start_queue');}catch(e){toast(errorText(e),true);}};
 
   listen('job-progress', ({payload})=>{const job=state.queue.find(j=>j.id===payload.jobId);if(!job)return;job.state=payload.state;job.progress=payload.percent;job.etaMs=payload.remainingMs;if(payload.outputPath){job.outputPath=payload.outputPath;job.estimate.outputPath=payload.outputPath;}if(payload.technicalDetail)job.error=payload.technicalDetail;$('progressBar').style.width=`${payload.percent}%`;$('progressPct').textContent=`${payload.percent.toFixed(1)}%`;$('progressLabel').textContent=payload.message||`${labels[payload.state]||payload.state} · 已用 ${fmtTime(payload.elapsedMs)}${payload.remainingMs?` · 剩余 ${fmtTime(payload.remainingMs)}`:''}`;renderQueue();if(payload.state==='failed')toast(`${payload.message} ${payload.technicalDetail||''}`,true);});
+  listen('job-encoder',({payload})=>{const job=state.queue.find(j=>j.id===payload.jobId);if(!job)return;job.effectiveEncoder=payload.encoder;job.effectiveHardware=payload.hardware;job.hardwareNotice=payload.notice;renderQueue();});
   listen('queue-finished',()=>{state.running=false;$('progressLabel').textContent='队列处理完毕';toast('输出队列处理完毕');});
   listen('tauri://drag-drop',event=>addPaths(event.payload.paths||[]));
   listen('tauri://drag-enter',()=>document.body.style.outline='2px solid var(--accent)'); listen('tauri://drag-leave',()=>document.body.style.outline='');

@@ -13,11 +13,12 @@ use crate::models::{
 use crate::paths;
 use crate::power;
 use crate::probe;
+use crate::process;
 use crate::queue::AppState;
 
 #[tauri::command]
 pub async fn get_app_info() -> Result<AppInfo, AppError> {
-    let output = tokio::process::Command::new(paths::sidecar("ffmpeg")?)
+    let output = process::hidden(paths::sidecar("ffmpeg")?)
         .arg("-version")
         .output()
         .await?;
@@ -36,7 +37,10 @@ pub async fn get_app_info() -> Result<AppInfo, AppError> {
 }
 
 #[tauri::command]
-pub async fn select_media_files(app: AppHandle) -> Result<Vec<MediaInfo>, AppError> {
+pub async fn select_media_files(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<Vec<MediaInfo>, AppError> {
     let picked = app
         .dialog()
         .file()
@@ -47,7 +51,10 @@ pub async fn select_media_files(app: AppHandle) -> Result<Vec<MediaInfo>, AppErr
     for item in picked {
         if let Ok(path) = item.into_path() {
             match probe::probe(&path).await {
-                Ok(info) => media.push(info),
+                Ok(info) => {
+                    state.register_preview(&info.id, path);
+                    media.push(info);
+                }
                 Err(error) => {
                     tracing::error!(path = %path.display(), error = %error, "probe failed")
                 }
@@ -68,8 +75,76 @@ pub async fn select_output_directory(app: AppHandle) -> Result<Option<String>, A
 }
 
 #[tauri::command]
-pub async fn probe_media(path: String) -> Result<MediaInfo, AppError> {
-    probe::probe(Path::new(&path)).await
+pub async fn probe_media(path: String, state: State<'_, AppState>) -> Result<MediaInfo, AppError> {
+    let canonical = PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|error| AppError::Probe(error.to_string()))?;
+    let info = probe::probe(&canonical).await?;
+    state.register_preview(&info.id, canonical);
+    Ok(info)
+}
+
+#[tauri::command]
+pub async fn create_compatible_preview(
+    id: String,
+    state: State<'_, AppState>,
+) -> Result<String, AppError> {
+    let source = state
+        .preview_path(&id)
+        .ok_or_else(|| AppError::Probe("预览文件未注册或已失效。".into()))?;
+    let preview_id = format!("{}-compat", uuid::Uuid::new_v4());
+    let cache_dir = dirs::cache_dir()
+        .unwrap_or_else(std::env::temp_dir)
+        .join("BitBento")
+        .join("previews");
+    tokio::fs::create_dir_all(&cache_dir).await?;
+    let output = cache_dir.join(format!("{preview_id}.mp4"));
+    let partial = cache_dir.join(format!("{preview_id}.part.mp4"));
+    let result = process::hidden(paths::sidecar("ffmpeg")?)
+        .args(["-y", "-hide_banner", "-loglevel", "error", "-i"])
+        .arg(&source)
+        .args([
+            "-map",
+            "0:v:0",
+            "-map",
+            "0:a:0?",
+            "-vf",
+            "scale=min(1280\\,iw):-2",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "28",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "96k",
+            "-movflags",
+            "+faststart",
+        ])
+        .arg(&partial)
+        .stdin(std::process::Stdio::null())
+        .output()
+        .await?;
+    if !result.status.success() {
+        let _ = tokio::fs::remove_file(&partial).await;
+        let detail = String::from_utf8_lossy(&result.stderr).trim().to_string();
+        tracing::error!(media_id = %id, %detail, "compatible preview generation failed");
+        return Err(AppError::Probe(if detail.is_empty() {
+            "无法生成兼容预览。".into()
+        } else {
+            detail
+        }));
+    }
+    tokio::fs::rename(&partial, &output).await?;
+    state.register_preview(&preview_id, output);
+    Ok(preview_id)
+}
+
+#[tauri::command]
+pub fn unregister_preview(id: String, state: State<'_, AppState>) {
+    state.unregister_preview(&id);
 }
 
 #[tauri::command]
@@ -256,7 +331,7 @@ pub async fn cancel_job(id: String, state: State<'_, AppState>) -> Result<(), Ap
     state.mark_cancelled(&id);
     let pid = state.running_pids.lock().get(&id).copied();
     if let Some(pid) = pid {
-        let _ = tokio::process::Command::new("taskkill.exe")
+        let _ = process::hidden("taskkill.exe")
             .args(["/PID", &pid.to_string(), "/T", "/F"])
             .output()
             .await;

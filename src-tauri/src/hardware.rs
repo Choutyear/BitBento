@@ -1,10 +1,9 @@
 use std::process::Stdio;
 
-use tokio::process::Command;
-
 use crate::errors::AppError;
 use crate::models::HardwareEncoder;
 use crate::paths;
+use crate::process;
 
 const CANDIDATES: &[(&str, &str, &[&str])] = &[
     (
@@ -22,7 +21,7 @@ const CANDIDATES: &[(&str, &str, &[&str])] = &[
 
 pub async fn detect() -> Result<Vec<HardwareEncoder>, AppError> {
     let ffmpeg = paths::sidecar("ffmpeg")?;
-    let output = Command::new(&ffmpeg)
+    let output = process::hidden(&ffmpeg)
         .args(["-hide_banner", "-encoders"])
         .output()
         .await?;
@@ -33,10 +32,9 @@ pub async fn detect() -> Result<Vec<HardwareEncoder>, AppError> {
         let mut failures = Vec::new();
         for name in *names {
             if listing.contains(name) {
-                if initialize(&ffmpeg, name).await {
-                    working.push((*name).to_string());
-                } else {
-                    failures.push((*name).to_string());
+                match initialize(&ffmpeg, name).await {
+                    Ok(()) => working.push((*name).to_string()),
+                    Err(reason) => failures.push(format!("{name}: {reason}")),
                 }
             }
         }
@@ -48,7 +46,7 @@ pub async fn detect() -> Result<Vec<HardwareEncoder>, AppError> {
             detail: if failures.is_empty() {
                 "已通过实际初始化测试".into()
             } else {
-                format!("驱动或设备无法初始化：{}", failures.join(", "))
+                failures.join("；")
             },
         });
     }
@@ -67,8 +65,8 @@ pub async fn detect() -> Result<Vec<HardwareEncoder>, AppError> {
     Ok(result)
 }
 
-async fn initialize(ffmpeg: &std::path::Path, encoder: &str) -> bool {
-    Command::new(ffmpeg)
+async fn initialize(ffmpeg: &std::path::Path, encoder: &str) -> Result<(), String> {
+    let output = process::hidden(ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -76,7 +74,7 @@ async fn initialize(ffmpeg: &std::path::Path, encoder: &str) -> bool {
             "-f",
             "lavfi",
             "-i",
-            "color=size=128x128:rate=1:duration=0.1",
+            "color=size=640x360:rate=30:duration=0.1",
             "-frames:v",
             "1",
             "-an",
@@ -88,11 +86,29 @@ async fn initialize(ffmpeg: &std::path::Path, encoder: &str) -> bool {
         ])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status()
+        .stderr(Stdio::piped())
+        .output()
         .await
-        .map(|s| s.success())
-        .unwrap_or(false)
+        .map_err(|error| error.to_string())?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let reason = stderr
+        .lines()
+        .find(|line| line.contains("minimum required Nvidia driver"))
+        .or_else(|| line_containing(&stderr, "required nvenc API"))
+        .or_else(|| line_containing(&stderr, "No capable devices found"))
+        .or_else(|| line_containing(&stderr, "Error while opening encoder"))
+        .or_else(|| stderr.lines().rev().find(|line| !line.trim().is_empty()))
+        .unwrap_or("编码器初始化失败")
+        .trim();
+    tracing::warn!(encoder, detail = %stderr.trim(), "hardware encoder initialization failed");
+    Err(reason.to_string())
+}
+
+fn line_containing<'a>(text: &'a str, needle: &str) -> Option<&'a str> {
+    text.lines().find(|line| line.contains(needle))
 }
 
 pub fn choose_encoder(

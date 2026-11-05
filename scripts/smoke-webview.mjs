@@ -61,22 +61,62 @@ const hardware = await evaluate(`window.__TAURI__.core.invoke('detect_hardware_e
 if (!hardware.some(item => item.mode === 'cpu' && item.available)) throw new Error('CPU encoder detection failed');
 
 const mediaPath = path.join(process.cwd(), 'test-media', "测试 视频 O'Brien.mp4");
+let preview = null;
+let compatiblePreview = null;
+if (process.env.BITBENTO_TEST_PREVIEW === '1') {
+  await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(mediaPath)}] })`);
+  await new Promise(resolve => setTimeout(resolve, 1800));
+  preview = await evaluate(`({
+    fileCount: document.getElementById('fileCount')?.textContent,
+    src: document.getElementById('videoPreview')?.currentSrc,
+    readyState: document.getElementById('videoPreview')?.readyState,
+    duration: document.getElementById('videoPreview')?.duration,
+    error: document.getElementById('videoPreview')?.error?.message || null,
+    visible: document.getElementById('videoPreview')?.classList.contains('ready')
+  })`);
+  if (preview.fileCount !== '1 个文件' || preview.readyState < 1 || !preview.visible || preview.error) {
+    throw new Error(`Local preview failed: ${JSON.stringify(preview)}`);
+  }
+}
+if (process.env.BITBENTO_TEST_COMPAT === '1') {
+  const mkvPath = path.join(process.cwd(), 'test-media', '长路径测试_abcdefghijklmnopqrstuvwxyz_0123456789', '第二层_日本語とスペース_abcdefghijklmnopqrstuvwxyz', '长路径 样本.mkv');
+  compatiblePreview = await evaluate(`(async()=>{
+    const media=await window.__TAURI__.core.invoke('probe_media',{path:${JSON.stringify(mkvPath)}});
+    const previewId=await window.__TAURI__.core.invoke('create_compatible_preview',{id:media.id});
+    const video=document.createElement('video');
+    video.src='http://bitbento-media.localhost/'+encodeURIComponent(previewId);
+    document.body.appendChild(video);
+    await new Promise((resolve,reject)=>{video.onloadedmetadata=resolve;video.onerror=()=>reject(new Error(video.error?.message||'preview load failed'));video.load();});
+    const result={previewId,readyState:video.readyState,duration:video.duration,error:video.error?.message||null};video.remove();return result;
+  })()`);
+  if (compatiblePreview.readyState < 1 || compatiblePreview.error) throw new Error(`Compatible preview failed: ${JSON.stringify(compatiblePreview)}`);
+}
+const strictNvenc = process.env.BITBENTO_TEST_STRICT_NVENC === '1';
+const smokeSettings = strictNvenc ? {
+  mode:'targetSize', container:'MP4', videoCodec:'H.265', bitrateKbps:null,
+  width:null, height:null, frameRate:null, audioMode:'aac', audioBitrateKbps:128,
+  targetBytes:600000, strictTarget:true, hardwareMode:'auto', suffix:'_webview_nvenc_strict',
+  outputDirectoryMode:'source', customOutputDirectory:null
+} : {
+  mode:'professional', container:'MP4', videoCodec:'H.264', bitrateKbps:400,
+  width:640, height:360, frameRate:30, audioMode:'aac', audioBitrateKbps:128,
+  targetBytes:null, strictTarget:false, hardwareMode:'cpu', suffix:'_webview_smoke',
+  outputDirectoryMode:'source', customOutputDirectory:null
+};
 const expression = `(async () => {
   const invoke = window.__TAURI__.core.invoke;
   const listen = window.__TAURI__.event.listen;
   const media = await invoke('probe_media', { path: ${JSON.stringify(mediaPath)} });
-  const settings = {
-    mode:'professional', container:'MP4', videoCodec:'H.264', bitrateKbps:400,
-    width:640, height:360, frameRate:30, audioMode:'aac', audioBitrateKbps:128,
-    targetBytes:null, strictTarget:false, hardwareMode:'cpu', suffix:'_webview_smoke',
-    outputDirectoryMode:'source', customOutputDirectory:null
-  };
+  const settings = ${JSON.stringify(smokeSettings)};
   const id = 'webview-smoke-' + Date.now();
   const jobs = await invoke('enqueue_jobs', { requests:[{ id, media, settings }] });
   return await new Promise(async (resolve, reject) => {
     let unlistenProgress;
     let unlistenFinished;
-    const finish = value => { unlistenProgress?.(); unlistenFinished?.(); resolve(value); };
+    let unlistenEncoder;
+    let encoderInfo=null;
+    const finish = value => { unlistenProgress?.(); unlistenFinished?.(); unlistenEncoder?.(); resolve({...value,encoderInfo}); };
+    unlistenEncoder = await listen('job-encoder', event => { if(event.payload.jobId===id)encoderInfo=event.payload; });
     unlistenProgress = await listen('job-progress', event => {
       if (event.payload.jobId !== id) return;
       if (event.payload.state === 'completed') finish(event.payload);
@@ -91,6 +131,9 @@ const completed = await Promise.race([
   evaluate(expression),
   new Promise((_, reject) => { timeout = setTimeout(() => reject(new Error('WebView queue smoke test timed out')), 45_000); })
 ]).finally(() => clearTimeout(timeout));
+if (strictNvenc && (completed.encoderInfo?.encoder !== 'hevc_nvenc' || !completed.encoderInfo?.hardware)) {
+  throw new Error(`Strict target did not use NVENC: ${JSON.stringify(completed.encoderInfo)}`);
+}
 
-console.log(JSON.stringify({ dom, appInfo, hardware, completed }, null, 2));
+console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, completed }, null, 2));
 socket.close();

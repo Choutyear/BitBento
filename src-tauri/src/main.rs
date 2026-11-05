@@ -4,10 +4,12 @@ mod commands;
 mod encoder;
 mod errors;
 mod hardware;
+mod media_protocol;
 mod models;
 mod paths;
 mod power;
 mod probe;
+mod process;
 mod queue;
 
 fn main() {
@@ -23,14 +25,21 @@ fn main() {
         .with_ansi(false)
         .init();
 
+    let state = queue::AppState::default();
+    let preview_paths = state.preview_paths.clone();
     tauri::Builder::default()
-        .manage(queue::AppState::default())
+        .register_uri_scheme_protocol("bitbento-media", move |_context, request| {
+            media_protocol::respond(&preview_paths, request)
+        })
+        .manage(state)
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::get_app_info,
             commands::select_media_files,
             commands::select_output_directory,
             commands::probe_media,
+            commands::create_compatible_preview,
+            commands::unregister_preview,
             commands::detect_hardware_encoders,
             commands::estimate_job,
             commands::enqueue_jobs,

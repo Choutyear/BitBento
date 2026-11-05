@@ -6,9 +6,9 @@ copying, and notice files are distributed in the adjacent licenses directory.
 
 FFmpeg / ffprobe
 ----------------
-Version: ffmpeg version 9.0.1-essentials_build-www.gyan.dev Copyright (c) 2000-2026 the FFmpeg developers
-Source archive: https://github.com/GyanD/codexffmpeg/releases/download/9.0.1/ffmpeg-9.0.1-essentials_build.zip
-Archive SHA-256: fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9
+Version: ffmpeg version 7.0.2-essentials_build-www.gyan.dev Copyright (c) 2000-2024 the FFmpeg developers
+Source archive: https://github.com/GyanD/codexffmpeg/releases/download/7.0.2/ffmpeg-7.0.2-essentials_build.zip
+Archive SHA-256: d5308d30872b2739cf53169df61faba8639d39a19b20b91e611c177ef676f64c
 Source code: https://github.com/FFmpeg/FFmpeg
 Build provider: Gyan Doshi Windows builds (https://www.gyan.dev/ffmpeg/builds/)
 License: GNU General Public License version 3 or later for this configured build.
@@ -21,7 +21,6 @@ configuration:
     --enable-static
     --disable-w32threads
     --disable-autodetect
-    --enable-cairo
     --enable-fontconfig
     --enable-iconv
     --enable-gnutls
@@ -61,7 +60,6 @@ configuration:
     --enable-nvdec
     --enable-nvenc
     --enable-vaapi
-    --enable-openal
     --enable-libgme
     --enable-libopenmpt
     --enable-libopencore-amrwb
@@ -74,8 +72,6 @@ configuration:
     --enable-libspeex
     --enable-libvorbis
     --enable-librubberband
-
-Exiting with exit code 0
 
 Rust packages linked into BitBento
 -----------------------------------

@@ -1,10 +1,10 @@
 FFmpeg 64-bit static Windows build from www.gyan.dev
 
-Version: 9.0.1-essentials_build-www.gyan.dev
+Version: 7.0.2-essentials_build-www.gyan.dev
 
 License: GPL v3
 
-Source Code: https://github.com/FFmpeg/FFmpeg/commit/bf1b838f2a
+Source Code: https://github.com/FFmpeg/FFmpeg/commit/e3a61e9103
 
 release-essentials build configuration: 
 

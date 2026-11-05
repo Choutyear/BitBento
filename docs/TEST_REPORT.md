@@ -2,7 +2,7 @@
 
 测试日期：2026-11-05  
 测试平台：Windows 11 x64  
-版本：0.1.0
+版本：0.1.1
 
 ## 构建与发布
 
@@ -11,9 +11,10 @@
 - `cargo clippy --all-targets -- -D warnings`：通过。
 - `cargo test`：2/2 单元测试通过。
 - `cargo test -- --ignored`：2/2 真实媒体集成测试通过。
-- Tauri release/NSIS：通过，生成 `release/BitBento-Setup.exe`（57,205,126 bytes，SHA-256 `e931f9f76f455b12944e6982dcd9dfcc6b277ce304582052ec2300f1a3e94278`）。
+- Tauri release/NSIS：通过，生成 `release/BitBento-Setup.exe`（47,661,295 bytes，SHA-256 `57af4850096234b4c55721ac777c8c0fbea07434ca7cf059fba454be1021c387`）。
 - 便携版：在 PATH 仅含 `C:\Windows\System32;C:\Windows` 的环境中启动并完成真实编码，未依赖全局 Node.js、Rust 或 FFmpeg。
 - 安装版：静默安装、安装后启动、真实编码及静默卸载均通过；卸载移除了程序和 sidecar，保留用户输出及本地日志。
+- Windows 子进程：FFmpeg、ffprobe 与 taskkill 全部经过统一 `CREATE_NO_WINDOW` 启动器；启动、探测、预览、编码、校验和取消不再创建控制台窗口。
 
 ## 真实媒体
 
@@ -24,6 +25,7 @@
 - MKV：163 字符长路径中的 `长路径 样本.mkv`，HEVC/Opus，24 fps，5.008 秒。
 - WebM：`web sample.webm`，VP9/Opus，30 fps，5.008 秒。
 - VFR MP4：`手机 VFR 样本.mp4`，`r_frame_rate=120/1`、`avg_frame_rate=54000000/2008333`；UI/后端标记为可变帧率，没有显示伪造的恒定帧率。
+- 本地播放：MP4/H.264 通过受限媒体协议直接播放，`readyState=4`、时长 6 秒；长路径 MKV/HEVC 通过离线 H.264/AAC 兼容预览加载，`readyState=4`、时长 5 秒。
 
 特殊字符、中文、日文、空格、撇号和长路径均通过 probe/encode 测试。原文件哈希和内容未被修改。
 
@@ -34,7 +36,7 @@
 - 目标 MB/滑块双向同步、保存后改动标脏、应用全部逐文件重新估算、专业摘要固定两行：通过代码路径和 WebView DOM 验证。
 - 封装/编码兼容矩阵：通过。
 - 不可能目标：编码前拒绝，单元测试通过。
-- 严格目标：请求 600,000 bytes，输出 `测试 视频 O'Brien_strict_test.mp4` 为 509,364 bytes；H.265/AAC，音视频流完整。
+- 严格目标：请求 600,000 bytes，自动模式实际选择 `hevc_nvenc`，最终发布版输出 590,739 bytes；输出校验通过且 H.265/AAC 音视频流完整。
 - 专业模式：输出 `web sample_pro_test.webm` 为 349,452 bytes；VP9/Opus，音视频流完整。
 - 队列：真实进度事件、已用时间、ETA、失败详情、连续任务和碰撞命名通过。
 - 取消：终止 FFmpeg 进程树，临时 `.part` 和 pass log 均清理，原文件保留。
@@ -46,11 +48,11 @@
 检测不是仅检查编码器名称，而是逐个尝试初始化：
 
 - Intel QSV：`h264_qsv`、`hevc_qsv` 可初始化；`av1_qsv` 不可用。
-- NVIDIA NVENC：当前机器不可初始化，UI 禁用并显示原因。
+- NVIDIA NVENC：RTX 3050 Laptop GPU + 552.12 驱动下，`h264_nvenc`、`hevc_nvenc` 实际初始化并完成严格目标编码；该 GPU 不支持 AV1 编码。
 - AMD AMF：当前机器不可初始化，UI 禁用并显示原因。
 - CPU：`libx264`、`libx265`、`libaom-av1`、`libvpx-vp9` 可用。
 
-自动模式只选已成功初始化且匹配目标编码的实现；硬件不可用会以中文提示并保持 CPU 可选。严格目标选择硬件时的限制已在 UI/发布说明中记录。
+自动模式只选已成功初始化且匹配目标编码的实现，并在队列中显示实际编码器。严格目标不再强制 CPU：硬件编码完成后校验字节数，超限时最多进行两次码率修正。
 
 ## 隐私与网络
 
@@ -60,11 +62,11 @@
 
 ## FFmpeg 与许可证
 
-- 版本：`ffmpeg 9.0.1-essentials_build-www.gyan.dev`。
-- 来源：Gyan FFmpeg Essentials 9.0.1，GitHub 发布归档。
-- 上游归档 SHA-256：`fec81ae03971d9dd4be3ebe02e263bd2ec1d789483f931bdba5f5715e65da2e9`（winget 安装时校验通过）。
-- `ffmpeg.exe` SHA-256：`72a489eccd008c2ec2c0a5856c5c75bc3d8bbfa90166c4566865c246445e6aa3`。
-- `ffprobe.exe` SHA-256：`19202b23c0043f15ad1b7bce2344f406fd52bd6efd8f995ce02e7392a1cec52f`。
+- 版本：`ffmpeg 7.0.2-essentials_build-www.gyan.dev`。
+- 来源：Gyan FFmpeg Essentials 7.0.2，GitHub 发布归档。选择该版本是因为 7.1.1/9.0.1 的 NVENC API 要求高于常见驱动，而 7.0.2 已在本机 552.12 驱动上验证。
+- 上游归档 SHA-256：`d5308d30872b2739cf53169df61faba8639d39a19b20b91e611c177ef676f64c`（winget manifest 与下载文件一致）。
+- `ffmpeg.exe` SHA-256：`33cf0d2a42486a59f74f3b3741d8ff71bed82169db7125e91804cf264b365a4a`。
+- `ffprobe.exe` SHA-256：`af3c38d4a25acf3bf0f16c3e36b7f0700bbf8fc1159057186a6f3f1fe7cd1611`。
 - 许可证：GPL-3.0-or-later；构建配置、FFmpeg LICENSE/README、Rust 依赖清单及可取得的许可证全文均随安装版和便携版发布。
 - 未签名构建的 SmartScreen/代码签名限制已写入发布 README。
 

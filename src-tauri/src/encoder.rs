@@ -4,7 +4,6 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, Emitter};
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
-use tokio::process::Command;
 
 use crate::errors::AppError;
 use crate::hardware;
@@ -13,7 +12,7 @@ use crate::models::{
     ProgressEvent,
 };
 use crate::queue::AppState;
-use crate::{paths, probe};
+use crate::{paths, probe, process};
 
 const TARGET_OVERHEAD_KBPS: u64 = 32;
 const DEFAULT_AUDIO_KBPS: u64 = 192;
@@ -196,16 +195,28 @@ pub async fn encode_job(
 ) -> Result<String, AppError> {
     state.clear_cancelled(&job.id);
     let mut estimate = job.estimate.clone();
-    let requested_hardware =
-        if job.settings.strict_target && job.settings.mode == EncodeMode::TargetSize {
-            "cpu"
-        } else {
-            job.settings.hardware_mode.as_str()
-        };
-    let (encoder, mut notice) =
-        hardware::choose_encoder(&estimate.resolved_video_codec, requested_hardware, detected)?;
-    if job.settings.strict_target && job.settings.hardware_mode != "cpu" {
-        notice = Some("严格目标大小已切换为 CPU 两遍编码，以确保输出不超过目标字节数。".into());
+    let (encoder, mut notice) = hardware::choose_encoder(
+        &estimate.resolved_video_codec,
+        job.settings.hardware_mode.as_str(),
+        detected,
+    )?;
+    let hardware_encode = is_hardware_encoder(&encoder);
+    if job.settings.strict_target && hardware_encode {
+        notice = Some(format!(
+            "严格目标大小将继续使用 {encoder}；编码后会校验字节数，必要时自动降低码率重试。"
+        ));
+    }
+    if let Some(app) = app {
+        let _ = app.emit(
+            "job-encoder",
+            serde_json::json!({
+                "jobId": job.id,
+                "requestedMode": job.settings.hardware_mode,
+                "encoder": encoder,
+                "hardware": hardware_encode,
+                "notice": notice,
+            }),
+        );
     }
     if let Some(message) = notice {
         emit(
@@ -229,7 +240,7 @@ pub async fn encode_job(
     let final_path = paths::resolve_collision(PathBuf::from(&estimate.output_path));
     let part = paths::part_path(&final_path, &job.id);
     let strict = job.settings.mode == EncodeMode::TargetSize && job.settings.strict_target;
-    let result = if strict {
+    let result = if strict && !hardware_encode {
         run_two_pass(app, state, job, &estimate, &encoder, &part).await
     } else {
         run_single_pass(app, state, job, &estimate, &encoder, &part).await
@@ -258,17 +269,41 @@ pub async fn encode_job(
     let finalize_result: Result<(), AppError> = async {
         verify(&part, &job.media, None).await?;
         if strict {
-            let size = tokio::fs::metadata(&part).await?.len();
             let target = job.settings.target_bytes.unwrap_or_default();
-            if size > target {
+            for retry in 1..=2 {
+                let size = tokio::fs::metadata(&part).await?.len();
+                if size <= target {
+                    break;
+                }
                 let corrected = ((estimate.video_bitrate_kbps as f64 * target as f64 / size as f64)
                     * 0.97)
                     .floor() as u64;
                 estimate.video_bitrate_kbps = corrected.max(100);
                 tokio::fs::remove_file(&part).await?;
-                run_two_pass(app, state, job, &estimate, &encoder, &part).await?;
-                verify(&part, &job.media, Some(target)).await?;
+                emit(
+                    app,
+                    &job.id,
+                    "encoding",
+                    0,
+                    0,
+                    job.media.duration_ms,
+                    0.0,
+                    None,
+                    None,
+                    0,
+                    None,
+                    Some(format!("输出超过严格上限，正在进行第 {retry} 次码率修正…")),
+                    None,
+                    None,
+                );
+                if hardware_encode {
+                    run_single_pass(app, state, job, &estimate, &encoder, &part).await?;
+                } else {
+                    run_two_pass(app, state, job, &estimate, &encoder, &part).await?;
+                }
+                verify(&part, &job.media, None).await?;
             }
+            verify(&part, &job.media, Some(target)).await?;
         }
         tokio::fs::rename(&part, &final_path)
             .await
@@ -383,7 +418,27 @@ fn common_args(
         "-b:v".into(),
         format!("{}k", estimate.video_bitrate_kbps),
     ]);
-    if encoder == "libx264" || encoder == "libx265" {
+    if encoder.ends_with("_nvenc") {
+        args.extend([
+            "-rc".into(),
+            "vbr".into(),
+            "-multipass".into(),
+            "fullres".into(),
+            "-preset".into(),
+            "p5".into(),
+            "-maxrate".into(),
+            format!("{}k", estimate.video_bitrate_kbps.saturating_mul(105) / 100),
+            "-bufsize".into(),
+            format!("{}k", estimate.video_bitrate_kbps.saturating_mul(2)),
+        ]);
+    } else if encoder.ends_with("_qsv") || encoder.ends_with("_amf") {
+        args.extend([
+            "-maxrate".into(),
+            format!("{}k", estimate.video_bitrate_kbps.saturating_mul(105) / 100),
+            "-bufsize".into(),
+            format!("{}k", estimate.video_bitrate_kbps.saturating_mul(2)),
+        ]);
+    } else if encoder == "libx264" || encoder == "libx265" {
         args.extend(["-preset".into(), "medium".into()]);
     }
     if job.settings.audio_mode == "remove" || estimate.audio_bitrate_kbps == 0 {
@@ -413,6 +468,10 @@ fn common_args(
     args
 }
 
+fn is_hardware_encoder(encoder: &str) -> bool {
+    encoder.ends_with("_nvenc") || encoder.ends_with("_qsv") || encoder.ends_with("_amf")
+}
+
 fn append_video_filters(args: &mut Vec<String>, settings: &OutputSettings) {
     if let (Some(width), Some(height)) = (settings.width, settings.height) {
         args.extend(["-vf".into(), format!("scale={width}:{height}:force_original_aspect_ratio=decrease,pad={width}:{height}:(ow-iw)/2:(oh-ih)/2")]);
@@ -429,7 +488,7 @@ async fn run_ffmpeg(
     pass: u8,
     args: Vec<String>,
 ) -> Result<(), AppError> {
-    let mut child = Command::new(paths::sidecar("ffmpeg")?)
+    let mut child = process::hidden(paths::sidecar("ffmpeg")?)
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -528,7 +587,7 @@ async fn run_ffmpeg(
 }
 
 async fn terminate_process_tree(pid: u32) {
-    let _ = Command::new("taskkill.exe")
+    let _ = process::hidden("taskkill.exe")
         .args(["/PID", &pid.to_string(), "/T", "/F"])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -701,6 +760,13 @@ mod tests {
             ..target_settings(600_000)
         };
         let strict_estimate = estimate(&media, &strict_settings).unwrap();
+        let (strict_encoder, _) = crate::hardware::choose_encoder(
+            &strict_estimate.resolved_video_codec,
+            &strict_settings.hardware_mode,
+            &hardware,
+        )
+        .unwrap();
+        assert_eq!(strict_encoder, "hevc_nvenc");
         let strict_job = EncodeJob {
             id: uuid::Uuid::new_v4().to_string(),
             media: media.clone(),

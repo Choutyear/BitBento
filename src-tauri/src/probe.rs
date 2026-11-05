@@ -2,12 +2,12 @@ use std::path::Path;
 use std::process::Stdio;
 
 use serde_json::Value;
-use tokio::process::Command;
 use uuid::Uuid;
 
 use crate::errors::AppError;
 use crate::models::MediaInfo;
 use crate::paths;
+use crate::process;
 
 fn rational(value: Option<&str>) -> Option<f64> {
     let value = value?;
@@ -25,7 +25,7 @@ pub async fn ffprobe_json(path: &Path) -> Result<Value, AppError> {
     if !path.is_file() {
         return Err(AppError::Probe("文件不存在或无法访问。".into()));
     }
-    let output = Command::new(paths::sidecar("ffprobe")?)
+    let output = process::hidden(paths::sidecar("ffprobe")?)
         .args([
             "-v",
             "error",

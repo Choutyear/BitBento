@@ -1,0 +1,19 @@
+{
+  "name": "bitbento",
+  "private": true,
+  "version": "0.1.0",
+  "description": "BitBento local video compressor",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build --bundles nsis"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.0"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.12.0",
+    "@tauri-apps/plugin-dialog": "^2.4.0",
+    "@tauri-apps/plugin-shell": "^2.3.0"
+  }
+}

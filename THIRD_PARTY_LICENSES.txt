@@ -1,0 +1,13 @@
+BitBento third-party notices
+============================
+
+Codex must replace this placeholder with the exact notices for the versions actually shipped.
+
+Required entries include:
+
+- Tauri and Tauri plugins
+- Rust crates included in the application
+- FFmpeg/ffprobe build source, version, download URL, SHA-256, build configuration, and applicable license
+- Any additional frontend or native dependency
+
+Do not ship a release while this file remains a placeholder.

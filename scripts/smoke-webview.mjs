@@ -67,6 +67,7 @@ let compatiblePreview = null;
 let ui020 = null;
 let ui021 = null;
 let mixedOutputs = null;
+let parameterMatrix = null;
 if (process.env.BITBENTO_TEST_PREVIEW === '1') {
   await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(mediaPath)}] })`);
   await new Promise(resolve => setTimeout(resolve, 1800));
@@ -81,6 +82,74 @@ if (process.env.BITBENTO_TEST_PREVIEW === '1') {
   if (preview.fileCount !== '1 个文件' || preview.readyState < 1 || !preview.visible || preview.error) {
     throw new Error(`Local preview failed: ${JSON.stringify(preview)}`);
   }
+}
+if (process.env.BITBENTO_TEST_PARAMETER_MATRIX === '1') {
+  if (!preview) {
+    await evaluate(`window.__TAURI__.event.emit('tauri://drag-drop', { paths:[${JSON.stringify(mediaPath)}] })`);
+    await new Promise(resolve => setTimeout(resolve, 1800));
+  }
+  parameterMatrix = await evaluate(`(async()=>{
+    const invoke=window.__TAURI__.core.invoke,listen=window.__TAURI__.event.listen;
+    const wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const setValue=(id,value,event='input')=>{const element=document.getElementById(id);element.value=String(value);element.dispatchEvent(new Event(event,{bubbles:true}));};
+    const runQueued=async expected=>{
+      const completed=new Map();
+      const finished=new Promise(async(resolve,reject)=>{
+        const timeout=setTimeout(()=>reject(new Error('parameter matrix timed out')),180000);
+        const unlisten=await listen('job-progress',event=>{
+          if(!expected.has(event.payload.jobId))return;
+          if(event.payload.state==='failed'){clearTimeout(timeout);unlisten();reject(new Error(event.payload.technicalDetail||'parameter matrix encode failed'));return;}
+          if(event.payload.state==='completed'&&event.payload.outputPath){completed.set(event.payload.jobId,event.payload.outputPath);if(completed.size===expected.size){clearTimeout(timeout);unlisten();resolve();}}
+        });
+      });
+      document.getElementById('renderAll').click();
+      await finished;
+      const results=[];
+      for(const [jobId,fps] of expected){const media=await invoke('probe_media',{path:completed.get(jobId)});results.push({jobId,expectedFps:fps,path:completed.get(jobId),container:media.container,codec:media.videoCodec,width:media.width,height:media.height,frameRate:media.frameRate,audioCodec:media.audioCodec});}
+      return results;
+    };
+    document.querySelector('[data-mode="target"]').click();
+    await wait(250);
+    setValue('targetInput',1);
+    setValue('fileSuffix','_parameter_target');
+    document.getElementById('saveCurrent').click();
+    await wait(700);
+    const targetUi={sourceFps:document.getElementById('sourceFps').textContent,compareFps:document.getElementById('cmpFpsNew').textContent,compareResolution:document.getElementById('cmpResNew').textContent,codec:document.getElementById('autoCodec').textContent};
+    document.getElementById('addQueue').click();
+    await wait(500);
+    const targetButton=[...document.querySelectorAll('[data-remove]')].at(-1),targetRow=targetButton.closest('.queue-item');
+    targetUi.queuePrimary=targetRow.children[1].children[0].textContent;targetUi.queueSecondary=targetRow.children[1].children[1].textContent;
+    targetUi.actual=(await runQueued(new Map([[targetButton.dataset.remove,30]])))[0];
+    document.getElementById('clearQueue').click();
+    await wait(400);
+
+    document.querySelector('[data-mode="pro"]').click();
+    await wait(250);
+    setValue('format','MP4','change');setValue('codec','H.264','change');setValue('bitrateSlider','1.5');setValue('resolution','same');setValue('audio','aac128');
+    const expected=new Map(),professional=[];
+    for(const fps of [60,50,30,25,24]){
+      setValue('fps',fps);
+      setValue('fileSuffix',\`_parameter_\${fps}fps\`);
+      document.getElementById('saveCurrent').click();
+      await wait(650);
+      const ui={fps,compareFps:document.getElementById('cmpFpsNew').textContent,compareResolution:document.getElementById('cmpResNew').textContent,summary1:document.getElementById('proSummaryLine1').textContent,summary2:document.getElementById('proSummaryLine2').textContent};
+      document.getElementById('addQueue').click();
+      await wait(450);
+      const button=[...document.querySelectorAll('[data-remove]')].at(-1),row=button.closest('.queue-item');
+      ui.jobId=button.dataset.remove;ui.queuePrimary=row.children[1].children[0].textContent;ui.queueSecondary=row.children[1].children[1].textContent;
+      expected.set(ui.jobId,fps);professional.push(ui);
+    }
+    const actual=await runQueued(expected);
+    document.getElementById('clearQueue').click();
+    return {target:targetUi,professional,actual};
+  })()`);
+  const target=parameterMatrix.target;
+  if(target.sourceFps!=='30 FPS'||target.compareFps!=='30 FPS'||target.compareResolution!=='640×360'||!target.codec.startsWith('H.265')||!target.queuePrimary.includes('H.265 · 640×360 · 30 FPS')||Math.abs(target.actual.frameRate-30)>.01||target.actual.width!==640||target.actual.height!==360||target.actual.codec!=='H.265')throw new Error(`target parameter mismatch: ${JSON.stringify(target)}`);
+  for(const ui of parameterMatrix.professional){
+    const expected=`${ui.fps} FPS`;
+    if(ui.compareFps!==expected||ui.compareResolution!=='640×360'||!ui.summary1.includes(`MP4 · H.264 · 640×360 · ${expected}`)||ui.summary2!=='1.5 Mbps · AAC 128 kbps'||!ui.queuePrimary.includes(`MP4 · H.264 · 640×360 · ${expected}`)||ui.queueSecondary!=='1.5 Mbps · AAC 128 kbps')throw new Error(`professional UI parameter mismatch: ${JSON.stringify(ui)}`);
+  }
+  for(const actual of parameterMatrix.actual){if(Math.abs(actual.frameRate-actual.expectedFps)>.01||actual.width!==640||actual.height!==360||actual.codec!=='H.264'||actual.audioCodec!=='AAC')throw new Error(`professional output parameter mismatch: ${JSON.stringify(actual)}`);}
 }
 if (process.env.BITBENTO_TEST_UI_020 === '1') {
   ui020 = await evaluate(`(async()=>{
@@ -112,6 +181,9 @@ if (process.env.BITBENTO_TEST_UI_021 === '1') {
     const portraitVideo={width:video.videoWidth,height:video.videoHeight,readyState:video.readyState,objectFit:getComputedStyle(video).objectFit,objectPosition:getComputedStyle(video).objectPosition,renderedWidth:videoRect.width,renderedHeight:videoRect.height,portraitClass:video.classList.contains('portrait')};
     document.querySelector('[data-mode="pro"]').click();
     await new Promise(resolve=>setTimeout(resolve,250));
+    const format=document.getElementById('format'),codec=document.getElementById('codec'),fps=document.getElementById('fps'),audio=document.getElementById('audio');
+    format.value='MP4';format.dispatchEvent(new Event('change',{bubbles:true}));codec.value='H.265';codec.dispatchEvent(new Event('change',{bubbles:true}));fps.value='60';fps.dispatchEvent(new Event('input',{bubbles:true}));audio.value='aac192';audio.dispatchEvent(new Event('input',{bubbles:true}));
+    await new Promise(resolve=>setTimeout(resolve,350));
     const resolution=document.getElementById('resolution');
     const portraitOptions=[...resolution.options].map(option=>({preset:option.dataset.preset,value:option.value,text:option.textContent}));
     const bitrate=document.getElementById('bitrateSlider'),quality=document.getElementById('qualityText');
@@ -259,5 +331,5 @@ if (strictNvenc && (completed.encoderInfo?.encoder !== 'hevc_nvenc' || !complete
   throw new Error(`Strict target did not use NVENC: ${JSON.stringify(completed.encoderInfo)}`);
 }
 
-console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, ui020, ui021, mixedOutputs, completed }, null, 2));
+console.log(JSON.stringify({ dom, appInfo, hardware, preview, compatiblePreview, parameterMatrix, ui020, ui021, mixedOutputs, completed }, null, 2));
 socket.close();

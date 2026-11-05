@@ -11,7 +11,7 @@
 - `cargo clippy --all-targets -- -D warnings`：通过。
 - `cargo test`：4/4 常规单元测试通过。
 - `cargo test -- --ignored`：2/2 真实媒体集成测试通过。
-- Tauri release/NSIS：通过，生成双语 `release/BitBento-Setup.exe`（47,948,948 bytes，SHA-256 `b0371949fdb715cbf421df5fab6e4bc95024125c46376c9e1a75c2a40b605459`）。安装器包含 English / 简体中文并按 Windows 当前语言预选。
+- Tauri release/NSIS：通过，生成双语 `release/BitBento-Setup.exe`（47,936,883 bytes，SHA-256 `b781df99bc31860665eb36ad47e32a562066ceab8cbbf53032015fa8760148ef`）。安装器包含 English / 简体中文并按 Windows 当前语言预选。
 - 便携主程序：10,862,592 bytes，SHA-256 `970329415897cd7d5bb47f14330b7b5ac67cb132fd202f5d61b2c15872b6539a`。
 - 便携版：在 PATH 仅含 `C:\Windows\System32;C:\Windows` 的环境中启动并完成真实编码，未依赖全局 Node.js、Rust 或 FFmpeg。
 - 安装版：静默安装、安装后启动、真实编码及静默卸载均通过；卸载移除了程序和 sidecar，保留用户输出及本地日志。
@@ -42,6 +42,7 @@
 
 - 目标 MB/滑块双向同步、保存后改动标脏、应用全部逐文件重新估算、专业摘要固定两行：通过代码路径和 WebView DOM 验证。
 - 指定大小模式强制保持源分辨率和源帧率；即使请求中残留专业模式的 4K/60 FPS 参数，后端也会忽略。640×360/30 FPS 实测对比栏完全一致。
+- 最终发布版增加参数一致性矩阵：指定大小模式的源信息、参数对比、队列和 ffprobe 成片均为 `640×360 · 30 FPS`；专业模式的 `60/50/30/25/24 FPS` 五档分别通过“设置控件 → 参数摘要 → 压缩参数对比 → 输出队列 → ffprobe 成片”逐层核对，五档实际成片帧率均与所选值完全一致，没有出现界面 30 FPS、队列或输出 60 FPS 的交叉污染。专业模式同时核对了 MP4、H.264、640×360、1.5 Mbps 和 AAC 128 kbps。
 - 修改批量文件名后缀、输出目录或硬件选项后，已保存文件仍保持绿色勾和选中状态，并重新计算输出路径。
 - 默认硬件为 NVIDIA NVENC；本机不可用时才回退到自动选择。
 - 队列已移除“独立 MP4 文件”等冗余描述，并显示实际编码器。

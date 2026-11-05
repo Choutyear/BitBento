@@ -1,7 +1,10 @@
 /node_modules/
 /src-tauri/target/
+/src-tauri/gen/
 /src-tauri/binaries/*.exe
 /release/
+/.cache/
+/test-media/
 *.log
 *.part
 .DS_Store

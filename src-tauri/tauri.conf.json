@@ -7,6 +7,7 @@
     "frontendDist": "../frontend"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "BitBento",
@@ -16,7 +17,8 @@
         "minHeight": 720,
         "resizable": true,
         "fullscreen": false,
-        "center": true
+        "center": true,
+        "dragDropEnabled": true
       }
     ],
     "security": {
@@ -29,6 +31,9 @@
     "externalBin": [
       "binaries/ffmpeg",
       "binaries/ffprobe"
+    ],
+    "resources": [
+      "binaries/licenses/**/*"
     ],
     "windows": {
       "nsis": {

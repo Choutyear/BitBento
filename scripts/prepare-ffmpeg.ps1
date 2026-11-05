@@ -27,6 +27,21 @@ try {
   Copy-Item $ffmpeg.FullName (Join-Path $target "ffmpeg-x86_64-pc-windows-msvc.exe") -Force
   Copy-Item $ffprobe.FullName (Join-Path $target "ffprobe-x86_64-pc-windows-msvc.exe") -Force
 
+  $licenseTarget = Join-Path $target "licenses"
+  New-Item -ItemType Directory -Path $licenseTarget -Force | Out-Null
+  $licenseFiles = Get-ChildItem $temp -Recurse -File | Where-Object { $_.Name -match '^(LICENSE|COPYING|README)(\..*)?$' }
+  $index = 0
+  foreach ($file in $licenseFiles) {
+    $index++
+    Copy-Item $file.FullName (Join-Path $licenseTarget ("FFmpeg-{0}-{1}" -f $index, $file.Name)) -Force
+  }
+
+  @(
+    "Archive: $([IO.Path]::GetFileName($archive))",
+    "Archive SHA-256: $actual",
+    "Prepared UTC: $([DateTime]::UtcNow.ToString('o'))"
+  ) | Set-Content -Encoding UTF8 (Join-Path $licenseTarget "BUILD_INFO.txt")
+
   & (Join-Path $target "ffmpeg-x86_64-pc-windows-msvc.exe") -hide_banner -version
   & (Join-Path $target "ffprobe-x86_64-pc-windows-msvc.exe") -hide_banner -version
   Write-Host "Verified FFmpeg sidecars prepared successfully."

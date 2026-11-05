@@ -3,6 +3,16 @@
   "private": true,
   "version": "0.2.1",
   "description": "BitBento local video compressor",
+  "author": "Steve Chou",
+  "license": "MIT",
+  "homepage": "https://github.com/Choutyear/BitBento#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Choutyear/BitBento.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Choutyear/BitBento/issues"
+  },
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev",

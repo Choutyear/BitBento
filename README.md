@@ -1,54 +1,120 @@
-# BitBento
+<p align="center">
+  <img src="frontend/bitbento-logo.png" width="112" alt="BitBento logo">
+</p>
 
-Neatly packed, locally processed.
+<h1 align="center">BitBento</h1>
 
-BitBento is a free, open-source, fully offline video compressor for Windows 11 x64, built with Tauri 2, Rust, FFmpeg, and ffprobe.
+<p align="center"><strong>A private, offline video compressor for Windows.</strong></p>
 
-Project homepage: https://github.com/Choutyear/BitBento
+<p align="center">
+  English · <a href="README.zh-CN.md">简体中文</a>
+</p>
 
-BitBento-owned source code is released under the [MIT License](LICENSE). Bundled third-party components retain their respective licenses; see [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt).
+<p align="center">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2011%20x64-0078D4">
+  <img alt="Tauri" src="https://img.shields.io/badge/Tauri-2-24C8DB">
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-49CF91">
+  <img alt="Privacy" src="https://img.shields.io/badge/processing-100%25%20offline-7B61FF">
+</p>
 
-## What is included
+BitBento is a free and open-source desktop video compressor built with Tauri 2, Rust, FFmpeg, and ffprobe. It processes every video locally: there are no uploads, accounts, advertisements, subscriptions, or telemetry.
 
-- Approved single-page interface: `frontend/index.html`
-- Tauri 2 + Rust desktop application: `src-tauri/`
-- Product and encoding requirements: `docs/`
-- Codex execution contract: `AGENTS.md`
-- Verified FFmpeg sidecar preparation and provenance script: `scripts/prepare-ffmpeg.ps1`
-- Release collection script: `scripts/collect-release.ps1`
+## Download
 
-Release builds bundle hash-verified local FFmpeg and ffprobe sidecars. Video files never leave the computer, and BitBento contains no telemetry, account, advertising, or cloud-upload SDK.
+Download the latest build from [GitHub Releases](https://github.com/Choutyear/BitBento/releases/latest).
 
-## Recommended build environment
+| Package | Use case |
+| --- | --- |
+| [BitBento-Setup.exe](https://github.com/Choutyear/BitBento/releases/latest/download/BitBento-Setup.exe) | Recommended. Installs BitBento for the current Windows user. The installer supports English and Simplified Chinese. |
+| [BitBento-Portable.zip](https://github.com/Choutyear/BitBento/releases/latest/download/BitBento-Portable.zip) | Extract the entire folder and run `BitBento.exe`. No installation is required. |
+
+BitBento currently ships as an unsigned build. Windows SmartScreen may show an “Unknown publisher” warning. Verify the SHA-256 checksums in the release before running a downloaded file.
+
+## Features
+
+- **Target size mode** — choose the desired file size while preserving the source resolution and frame rate.
+- **Professional mode** — control the container, video codec, bitrate, resolution, frame rate, and audio settings.
+- **Real batch queue** — process multiple videos with live progress, elapsed time, remaining-time estimates, cancellation, collision-safe filenames, and clear errors.
+- **Hardware acceleration** — validates encoders by actually initializing them before offering NVIDIA NVENC, Intel Quick Sync, or AMD AMF. CPU encoding remains available as a fallback.
+- **Accurate media inspection** — reads metadata with the bundled ffprobe and handles MP4, MOV, MKV, WebM, variable-frame-rate video, rotation metadata, Unicode filenames, and long Windows paths.
+- **Local playback** — previews supported videos directly and creates a temporary offline compatibility preview when necessary.
+- **Bilingual interface** — switch between English and Simplified Chinese at any time. The NSIS installer also supports both languages.
+- **Private by design** — no network processing, telemetry, cloud SDK, account system, or advertising.
+
+## How it works
+
+BitBento uses a Tauri WebView for the interface and a Rust backend for all privileged work. The frontend cannot execute arbitrary shell commands. Rust invokes the verified local FFmpeg and ffprobe sidecars with structured arguments, emits typed job events, writes to temporary partial files, and only finalizes a successful output.
+
+In strict target-size mode, BitBento reserves container and audio overhead, encodes locally, verifies the final byte size, and adjusts the bitrate when another pass is needed. Hardware acceleration can remain enabled during this process when the selected encoder has passed initialization.
+
+## System requirements
 
 - Windows 11 x64
-- Microsoft C++ Build Tools with the Desktop development with C++ workload
-- Microsoft Edge WebView2 Runtime
-- Rust stable (MSVC toolchain)
+- Microsoft Edge WebView2 Runtime (normally included with Windows 11)
+- A supported GPU and current driver for optional hardware encoding
+
+BitBento bundles its own FFmpeg and ffprobe binaries. Users do not need to install FFmpeg, Node.js, or Rust.
+
+## Build from source
+
+### Prerequisites
+
+- Windows 11 x64
+- Microsoft C++ Build Tools with the **Desktop development with C++** workload
+- Rust stable with the MSVC toolchain
 - Node.js LTS and npm
-- Two verified Windows x64 binaries: `ffmpeg.exe` and `ffprobe.exe`
+- Microsoft Edge WebView2 Runtime
+- The verified Gyan FFmpeg 7.0.2 Essentials Windows x64 archive
 
-## First run for Codex
+### Prepare and build
 
-1. Read `AGENTS.md` and every file in `docs/`.
-2. Run `npm install`.
-3. Prepare sidecars:
+```powershell
+git clone https://github.com/Choutyear/BitBento.git
+cd BitBento
+npm ci
 
-   ```powershell
-   .\scripts\prepare-ffmpeg.ps1 -ArchivePath C:\Downloads\ffmpeg.zip -ExpectedSha256 "<SHA256>"
-   ```
+powershell -ExecutionPolicy Bypass -File .\scripts\prepare-ffmpeg.ps1 `
+  -ArchivePath C:\Downloads\ffmpeg-7.0.2-essentials_build.zip `
+  -ExpectedSha256 d5308d30872b2739cf53169df61faba8639d39a19b20b91e611c177ef676f64c
 
-4. Implement the backend and replace prototype-only frontend behavior.
-5. Run `npm run tauri dev` during development.
-6. Run `npm run tauri build -- --bundles nsis` for the installer.
-7. Run `powershell -ExecutionPolicy Bypass -File .\scripts\collect-release.ps1` to assemble deliverables.
+npm run build
+powershell -ExecutionPolicy Bypass -File .\scripts\collect-release.ps1
+```
 
-## Expected final deliverables
+The final installer and portable folder are written to `release/`. FFmpeg executables are deliberately excluded from Git; the preparation script verifies the archive checksum before installing the sidecars.
 
-- `release/BitBento-Setup.exe`
-- `release/BitBento-Portable/BitBento.exe`
-- Bundled sidecars and required runtime files in the portable folder
-- `release/THIRD_PARTY_LICENSES.txt`
-- A short `release/README.txt`
+## Development and tests
 
-The raw Tauri release executable may run portably, but Codex must test the collected portable folder on a clean Windows 11 account before shipping it.
+```powershell
+npm run dev
+cargo fmt --manifest-path .\src-tauri\Cargo.toml --all -- --check
+cargo clippy --manifest-path .\src-tauri\Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path .\src-tauri\Cargo.toml --all-targets
+cargo test --manifest-path .\src-tauri\Cargo.toml --all-targets -- --ignored --test-threads=1
+```
+
+The ignored Rust tests require prepared FFmpeg sidecars and exercise real probing, strict target-size encoding, professional encoding, cancellation, and cleanup. The release checklist and the latest Windows test report are available in [`docs/ACCEPTANCE_CHECKLIST.md`](docs/ACCEPTANCE_CHECKLIST.md) and [`docs/TEST_REPORT.md`](docs/TEST_REPORT.md).
+
+## Project structure
+
+```text
+frontend/            Approved UI, localization, and queue interaction
+src-tauri/src/       Rust commands, probing, encoding, queue, and hardware detection
+src-tauri/binaries/  Sidecar placeholders and distributable license files
+scripts/             Sidecar preparation, release packaging, and WebView tests
+docs/                Product specification, architecture, and acceptance records
+```
+
+## Privacy
+
+All media analysis, preview generation, and encoding happen on the local computer. BitBento does not upload filenames, metadata, videos, diagnostics, or usage data. Technical logs are stored locally to help diagnose failures.
+
+## Free software statement
+
+BitBento is provided free of charge. No purchase, subscription, or payment is required. If a third-party distributor requests a software license fee, verify the source and prefer the official [GitHub repository](https://github.com/Choutyear/BitBento). BitBento is developed and maintained by Steve Chou.
+
+## License and third-party software
+
+BitBento-owned source code is released under the [MIT License](LICENSE). The bundled FFmpeg build is distributed under GPL-3.0-or-later, and other dependencies retain their respective upstream licenses. See [THIRD_PARTY_LICENSES.txt](THIRD_PARTY_LICENSES.txt) and the files under `src-tauri/binaries/licenses/` for provenance and license texts.
+
+Contributions and bug reports are welcome through GitHub Issues and pull requests.

@@ -3,6 +3,9 @@ name = "bitbento"
 version = "0.2.1"
 description = "BitBento local video compressor"
 authors = ["Steve Chou"]
+license = "MIT"
+repository = "https://github.com/Choutyear/BitBento"
+homepage = "https://github.com/Choutyear/BitBento"
 edition = "2021"
 rust-version = "1.77.2"
 

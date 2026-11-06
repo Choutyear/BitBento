@@ -9,11 +9,15 @@
   A private, offline video compressor built for Windows 11.
 </p>
 
+<br>
+
 <p align="center">
-  <a href="https://choutyear.github.io/BitBento/"><img src="docs/images/button-website-en.svg" alt="Official Website" height="40"></a>
+  <a href="https://choutyear.github.io/BitBento/"><img src="docs/images/button-website-en.svg" alt="Official Website" height="48"></a>
   &nbsp;
-  <a href="https://github.com/Choutyear/BitBento/releases/latest/download/BitBento-Setup.exe"><img src="docs/images/button-download-en.svg" alt="Download App" height="40"></a>
+  <a href="https://github.com/Choutyear/BitBento/releases/latest/download/BitBento-Setup.exe"><img src="docs/images/button-download-en.svg" alt="Download App" height="48"></a>
 </p>
+
+<br>
 
 <p align="center">
   English · <a href="README.zh-CN.md">简体中文</a>

@@ -6,11 +6,15 @@
 
 <p align="center"><strong>一款注重隐私、完全离线的 Windows 视频压缩工具。</strong></p>
 
+<br>
+
 <p align="center">
-  <a href="https://choutyear.github.io/BitBento/index.zh-CN.html"><img src="docs/images/button-website-zh.svg" alt="官方网站" height="40"></a>
+  <a href="https://choutyear.github.io/BitBento/index.zh-CN.html"><img src="docs/images/button-website-zh.svg" alt="官方网站" height="48"></a>
   &nbsp;
-  <a href="https://github.com/Choutyear/BitBento/releases/latest/download/BitBento-Setup.exe"><img src="docs/images/button-download-zh.svg" alt="下载软件" height="40"></a>
+  <a href="https://github.com/Choutyear/BitBento/releases/latest/download/BitBento-Setup.exe"><img src="docs/images/button-download-zh.svg" alt="下载软件" height="48"></a>
 </p>
+
+<br>
 
 <p align="center">
   <a href="README.md">English</a> · 简体中文

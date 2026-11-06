@@ -1,8 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="148" height="40" viewBox="0 0 148 40" role="img" aria-label="Official Website">
-  <rect x="1" y="1" width="146" height="38" rx="19" fill="#18181b"/>
+<svg xmlns="http://www.w3.org/2000/svg" width="168" height="48" viewBox="0 0 168 48" role="img" aria-label="Official Website">
+  <defs><linearGradient id="websiteGradientEn" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#2563EB"/><stop offset="1" stop-color="#7C3AED"/></linearGradient></defs>
+  <rect x="1" y="1" width="166" height="46" rx="23" fill="url(#websiteGradientEn)" stroke="#A9C5FF" stroke-opacity=".35"/>
   <g fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-    <circle cx="22" cy="20" r="7"/>
-    <path d="M15 20h14M22 13c2.2 2.1 3.3 4.4 3.3 7S24.2 24.9 22 27M22 13c-2.2 2.1-3.3 4.4-3.3 7s1.1 4.9 3.3 7"/>
+    <circle cx="25" cy="24" r="8"/>
+    <path d="M17 24h16M25 16c2.5 2.4 3.8 5 3.8 8S27.5 29.6 25 32M25 16c-2.5 2.4-3.8 5-3.8 8s1.3 5.6 3.8 8"/>
   </g>
-  <text x="38" y="25" fill="#fff" font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600">Official Website</text>
+  <text x="43" y="29" fill="#fff" font-family="Segoe UI,Arial,sans-serif" font-size="15" font-weight="700">Official Website</text>
 </svg>

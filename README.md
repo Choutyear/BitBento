@@ -4,7 +4,16 @@
 
 <h1 align="center">BitBento</h1>
 
-<p align="center"><strong>A private, offline video compressor for Windows.</strong></p>
+<p align="center">
+  <strong>Neatly packed. Locally processed.</strong><br>
+  A private, offline video compressor built for Windows 11.
+</p>
+
+<p align="center">
+  <a href="promo/index.en.html"><img src="docs/images/button-website-en.svg" alt="Official Website" height="40"></a>
+  &nbsp;
+  <a href="https://github.com/Choutyear/BitBento/releases/latest/download/BitBento-Setup.exe"><img src="docs/images/button-download-en.svg" alt="Download App" height="40"></a>
+</p>
 
 <p align="center">
   English · <a href="README.zh-CN.md">简体中文</a>
@@ -19,6 +28,20 @@
 
 BitBento is a free and open-source desktop video compressor built with Tauri 2, Rust, FFmpeg, and ffprobe. It processes every video locally: there are no uploads, accounts, advertisements, subscriptions, or telemetry.
 
+<p align="center">
+  <img src="docs/images/bitbento-overview.png" width="100%" alt="BitBento desktop app in Simplified Chinese, showing its media list, video details, target-size controls, and output queue">
+</p>
+
+<p align="center"><sub>The real BitBento desktop app on Windows 11 — Simplified Chinese is the default UI language.</sub></p>
+
+<p align="center">
+  <a href="https://github.com/Choutyear/BitBento/releases/latest"><strong>Download for Windows</strong></a>
+  &nbsp;·&nbsp;
+  <a href="#build-from-source">Build from source</a>
+  &nbsp;·&nbsp;
+  <a href="README.zh-CN.md">阅读中文说明</a>
+</p>
+
 ## Download
 
 Download the latest build from [GitHub Releases](https://github.com/Choutyear/BitBento/releases/latest).
@@ -32,14 +55,26 @@ BitBento currently ships as an unsigned build. Windows SmartScreen may show an �
 
 ## Features
 
-- **Target size mode** — choose the desired file size while preserving the source resolution and frame rate.
-- **Professional mode** — control the container, video codec, bitrate, resolution, frame rate, and audio settings.
-- **Real batch queue** — process multiple videos with live progress, elapsed time, remaining-time estimates, cancellation, collision-safe filenames, and clear errors.
-- **Hardware acceleration** — validates encoders by actually initializing them before offering NVIDIA NVENC, Intel Quick Sync, or AMD AMF. CPU encoding remains available as a fallback.
-- **Accurate media inspection** — reads metadata with the bundled ffprobe and handles MP4, MOV, MKV, WebM, variable-frame-rate video, rotation metadata, Unicode filenames, and long Windows paths.
-- **Local playback** — previews supported videos directly and creates a temporary offline compatibility preview when necessary.
-- **Bilingual interface** — switch between English and Simplified Chinese at any time. The NSIS installer also supports both languages.
-- **Private by design** — no network processing, telemetry, cloud SDK, account system, or advertising.
+| Pick a size, not a bitrate | Keep the whole batch moving | Stay offline by design |
+| --- | --- | --- |
+| Enter the file size you need. BitBento calculates the bitrate, preserves source resolution and frame rate, and can strictly verify the final byte size. | Queue multiple videos with real progress, elapsed time, ETA, safe cancellation, collision-free filenames, and clear per-job errors. | Inspection, preview generation, and encoding all happen on your PC. No uploads, accounts, telemetry, cloud SDKs, or ads. |
+
+| For everyday compression | For precise control |
+| --- | --- |
+| **Target size mode** keeps the workflow deliberately simple: choose the desired MB value and let BitBento handle the encoding parameters. | **Professional mode** gives you control over container, codec, bitrate, resolution, frame rate, and audio. |
+
+### Built for real media
+
+- **Accurate inspection** with bundled ffprobe for MP4, MOV, MKV, WebM, variable-frame-rate video, rotation metadata, Unicode filenames, and long Windows paths.
+- **Verified hardware acceleration** for NVIDIA NVENC, Intel Quick Sync, and AMD AMF. An encoder is offered only after it successfully initializes; CPU encoding remains available as a fallback.
+- **Local playback** for supported videos, with a temporary offline compatibility preview when needed.
+- **Bilingual from setup to export** with English and Simplified Chinese in both the app and NSIS installer.
+
+## From video to Bento in three steps
+
+1. **Add your videos** — select one or many files, or drag them into the media list. BitBento reads their real metadata locally.
+2. **Choose the result** — set a target size for a quick workflow, or switch to professional controls when every parameter matters.
+3. **Start the queue** — watch real FFmpeg progress, cancel safely when needed, then open the completed file or its folder.
 
 ## How it works
 

@@ -89,9 +89,4 @@
 - 许可证：GPL-3.0-or-later；构建配置、FFmpeg LICENSE/README、Rust 依赖清单及可取得的许可证全文均随安装版和便携版发布。
 - 未签名构建的 SmartScreen/代码签名限制已写入发布 README。
 
-## 尚未完成的人工复验
 
-- Windows 原生文件选择对话框中一次选择 MP4/MOV/MKV/WebM 的鼠标级操作。
-- 从资源管理器把多个视频拖入窗口的鼠标级操作。
-
-上述两项受当前 Codex Windows UI 自动化 helper 故障阻塞；实现、编译及对应真实路径处理已完成。除此之外，`docs/ACCEPTANCE_CHECKLIST.md` 中的项目均已通过自动化、真实媒体或发布二进制端到端验证。

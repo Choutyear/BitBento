@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="promo/index.en.html"><img src="docs/images/button-website-en.svg" alt="Official Website" height="40"></a>
+  <a href="https://choutyear.github.io/BitBento/"><img src="docs/images/button-website-en.svg" alt="Official Website" height="40"></a>
   &nbsp;
   <a href="https://github.com/Choutyear/BitBento/releases/latest/download/BitBento-Setup.exe"><img src="docs/images/button-download-en.svg" alt="Download App" height="40"></a>
 </p>
